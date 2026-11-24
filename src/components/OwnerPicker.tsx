@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import {
-  hasInferredRows,
   isAmbiguous,
   isDuplicate,
   isFound,
@@ -16,8 +15,6 @@ export interface AddedOwner {
   hash: string;
   /** השם תואם ליותר ממספר זהות אחד — ייתכן שמדובר בכמה בעלים באותו שם */
   ambiguous: boolean;
-  /** נכללו שורות שקושרו לפי השם בלבד, בלי מספר זהות בטבלה */
-  inferred: boolean;
 }
 
 interface Props {
@@ -48,8 +45,8 @@ export default function OwnerPicker({ version, owners, onChange }: Props) {
       setStatus('notfound');
       return;
     }
-    // מניעת הוספה כפולה של אותו אדם (למשל פעם לפי שם ופעם לפי ת.ז.): בעלים שכבר ברשימה
-    // ומתייחס בדיוק לאותן שורות. חוכר של בעלים שנוסף, או אדם אחר באותו שם, ניתנים להוספה.
+    // מניעת הוספה כפולה: בעלים שכבר ברשימה ומתייחס בדיוק לאותם צדדים בטבלאות (אותו hash, או
+    // שם ות.ז. של אותו אדם). חוכר של בעלים שנוסף, או בעל שם זהה, ניתנים להוספה.
     if (
       isDuplicate(
         owners.map((o) => o.hash),
@@ -61,10 +58,7 @@ export default function OwnerPicker({ version, owners, onChange }: Props) {
       return;
     }
 
-    onChange([
-      ...owners,
-      { label: raw, hash, ambiguous: isAmbiguous(hash), inferred: hasInferredRows(hash) },
-    ]);
+    onChange([...owners, { label: raw, hash, ambiguous: isAmbiguous(hash) }]);
     setText('');
     setStatus('idle');
   };
@@ -181,16 +175,6 @@ export default function OwnerPicker({ version, owners, onChange }: Props) {
             .join(', ')}{' '}
           מופיע בטבלאות עם יותר ממספר זהות אחד — ייתכן שמדובר בכמה בעלים באותו שם, והחישוב כולל את
           כל השורות שבהן השם מופיע. לחישוב מדויק — הסירו אותו וחפשו לפי מספר ת.ז.
-        </p>
-      )}
-      {owners.some((o) => o.inferred) && (
-        <p className="empty">
-          עבור{' '}
-          {owners
-            .filter((o) => o.inferred)
-            .map((o) => `״${o.label}״`)
-            .join(', ')}{' '}
-          נכללו גם שורות שבהן השם מופיע בטבלאות בלי מספר זהות. בדקו מול הטבלאות שהן אכן שלכם.
         </p>
       )}
       {owners.some((o) => holdingsOf(o).length === 0) && (

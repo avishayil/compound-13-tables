@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   DATASETS,
   isAmbiguousIn,
-  hasInferredRowsIn,
   isDuplicateIn,
   ownerRows,
   resolveHoldings,
@@ -103,17 +102,34 @@ describe('isDuplicateIn — לפי הזכויות שהבעלים מוסיף בפ
     expect(isDuplicateIn(all, ['ID'], 'N')).toBe(true);
   });
 
-  it('ת.ז. מקשרת לשורות של אותו שם בלי ת.ז. כשהשם חד-משמעי — ומסומנת כהשלמה', () => {
+  it('ת.ז. אינה מושכת שורות של אותו שם בלי ת.ז. (ייתכן שהן של אדם אחר באותו שם)', () => {
     const all: OwnersByVersion = {
       v1: [h('X', '', '44', '1/250')],
       v2: [h('X', 'IDX', '41', '1/10')],
     };
-    expect(resolveManyIn(all, 'v1', ['IDX']).map((x) => x.plotId)).toEqual(['44']);
-    expect(hasInferredRowsIn(all, 'IDX')).toBe(true);
-    expect(hasInferredRowsIn(all, 'X')).toBe(false);
-    // שם ות.ז. של אותו אדם מתייחסים לאותן שורות — כפולים זה לזה בשני הכיוונים
-    expect(isDuplicateIn(all, ['IDX'], 'X')).toBe(true);
+    expect(resolveManyIn(all, 'v1', ['IDX'])).toEqual([]);
+    expect(resolveManyIn(all, 'v1', ['X']).map((x) => x.plotId)).toEqual(['44']);
+    // השם מתייחס לשורות נוספות — ולכן אינו כפול לת.ז. (ולהפך); שורות משותפות נספרות פעם אחת
+    expect(isDuplicateIn(all, ['IDX'], 'X')).toBe(false);
+    expect(isDuplicateIn(all, ['X'], 'IDX')).toBe(false);
+  });
+
+  it('שם ות.ז. של אותו אדם (כל השורות עם ת.ז.) — כפולים זה לזה', () => {
+    const all: OwnersByVersion = {
+      v1: [h('X', 'IDX', '44', '1/250')],
+      v2: [h('X-variant', 'IDX', '41', '1/10')],
+    };
     expect(isDuplicateIn(all, ['X'], 'IDX')).toBe(true);
+    expect(isDuplicateIn(all, ['IDX'], 'X')).toBe(true);
+  });
+
+  it('אחרי שם עמום אפשר להוסיף כל אחד מבעלי השם לפי ת.ז.', () => {
+    const all: OwnersByVersion = {
+      v1: [h('N', 'ID1', '44', '1/250')],
+      v2: [h('N', 'ID2', '41', '1/10')],
+    };
+    expect(isDuplicateIn(all, ['N'], 'ID1')).toBe(false);
+    expect(isDuplicateIn(all, ['N'], 'ID2')).toBe(false);
   });
 
   it('בעלים וחוכר באותה שורה יחידה הם שני אנשים — לא כפולים', () => {

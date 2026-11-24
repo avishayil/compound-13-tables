@@ -136,66 +136,40 @@ export function isAmbiguousIn(all: OwnersByVersion, hash: string): boolean {
   return hash !== '' && matchedIds(all, hash).size > 1;
 }
 
-const sideName = (e: Entry) => (e.side === 'owner' ? e.row.nameHash : e.row.altNameHash);
-
 /**
- * האדם שה-hashes מזהים: ה-hashes עצמם, ובנוסף קישורים בין שם לת.ז. של הצד שתאם (בכל
- * הגרסאות), כך שחיפוש לפי שם ולפי ת.ז. של אותו אדם מגיע לאותן שורות:
- *  * hash שתואם מספר זהות אחד בדיוק → מוסיפים את הת.ז. (שורות שבהן השם נכתב אחרת).
- *  * השמות של הצדדים עם הת.ז., כל עוד השם חד-משמעי (ת.ז. אחת בלבד) → מוסיפים את השם
- *    (שורות שבהן השם מופיע בלי ת.ז.; מסומן כהשלמה, ראו hasInferredRowsIn).
- * שם עמום (כמה ת.ז.) אינו מקושר כלל, ורק הצד שתאם (בעלים/חוכר) מקושר — לא הצד השני בשורה.
+ * כל ה-hashes שמזהים את האדם: ה-hashes שחופשו, ובנוסף — כשה-hash תואם מספר זהות אחד בדיוק —
+ * ה-hash של מספר הזהות הזה (של הצד שתאם בלבד, לא של הצד השני בשורה). כך חיפוש לפי שם מוצא
+ * גם שורות שבהן השם נכתב אחרת אך הת.ז. זהה.
+ *
+ * החלטה מכוונת: אין קישור מת.ז. לשם. שורות בלי ת.ז. באותו שם עשויות להיות של אדם אחר (למשל
+ * הורה ויורש באותו שם), ולכן חיפוש לפי ת.ז. מחזיר רק שורות עם הת.ז. — לעולם לא זכויות של מישהו
+ * אחר. המחיר: שם ות.ז. של אותו אדם עשויים להיראות כשני בעלים ברשימה; הסכום נשאר נכון כי כל
+ * שורה נספרת פעם אחת. שם עמום (כמה ת.ז.) אינו מקושר כלל.
  */
-function resolvePerson(
-  all: OwnersByVersion,
-  hashes: string[],
-): { hashes: Set<string>; linkedNames: Set<string> } {
+function personHashes(all: OwnersByVersion, hashes: string[]): Set<string> {
   const person = new Set(hashes.filter(Boolean));
-  const linkedNames = new Set<string>();
-  const index = indexOf(all);
   for (const hash of [...person]) {
     const ids = matchedIds(all, hash);
-    if (ids.size !== 1) continue;
-    const [id] = ids;
-    person.add(id);
-    for (const e of index.get(id) ?? []) {
-      const name = sideName(e);
-      if (name && !person.has(name) && matchedIds(all, name).size === 1) {
-        person.add(name);
-        linkedNames.add(name);
-      }
-    }
+    if (ids.size === 1) person.add([...ids][0]);
   }
-  return { hashes: person, linkedNames };
+  return person;
 }
 
-/** הצדדים (שורה + צד) של האדם בגרסה. */
-function entriesOf(all: OwnersByVersion, version: VersionId, hashes: string[]): Map<string, Entry> {
+/** כל הצדדים (שורה + בעלים/חוכר) של האדם, בכל הגרסאות. */
+function allEntries(all: OwnersByVersion, hashes: string[]): Map<string, Entry> {
   const index = indexOf(all);
   const out = new Map<string, Entry>();
-  for (const hash of resolvePerson(all, hashes).hashes) {
-    for (const e of index.get(hash) ?? []) {
-      if (e.version === version) out.set(e.key, e);
-    }
+  for (const hash of personHashes(all, hashes)) {
+    for (const e of index.get(hash) ?? []) out.set(e.key, e);
   }
   return out;
 }
 
 /** השורות של האדם בגרסה, כקבוצה (ללא כפילות שורות). */
 function rowSet(all: OwnersByVersion, version: VersionId, hashes: string[]): Set<OwnerHolding> {
-  return new Set([...entriesOf(all, version, hashes).values()].map((e) => e.row));
-}
-
-/**
- * האם החיפוש כולל שורות שקושרו רק לפי שם, בלי מספר זהות (למשל חיפוש לפי ת.ז. שמצא גם
- * שורות של אותו שם שבהן הת.ז. חסרה). מוצג למשתמש כדי שיוכל לבדוק שהן אכן שלו.
- */
-export function hasInferredRowsIn(all: OwnersByVersion, hash: string): boolean {
-  const index = indexOf(all);
-  for (const name of resolvePerson(all, [hash]).linkedNames) {
-    if ((index.get(name) ?? []).some((e) => !sideId(e))) return true;
-  }
-  return false;
+  const rows = new Set<OwnerHolding>();
+  for (const e of allEntries(all, hashes).values()) if (e.version === version) rows.add(e.row);
+  return rows;
 }
 
 /**
@@ -213,19 +187,16 @@ export function resolveManyIn(
 }
 
 /**
- * האם הבעלים כבר נוסף: כל הצדדים (שורה + בעלים/חוכר) שלו, בכל הגרסאות, כבר שייכים לבעלים
- * אחד שברשימה — למשל אותו אדם שנוסף פעם לפי שם ופעם לפי ת.ז. חוכר באותה שורה של בעלים
- * שנוסף הוא צד אחר ולכן אינו כפול (השורה עדיין נספרת פעם אחת).
+ * האם הבעלים כבר נוסף: יש בעלים ברשימה שמתייחס בדיוק לאותם צדדים (שורה + בעלים/חוכר) בכל
+ * הגרסאות — למשל אותו hash שוב, או שם ות.ז. של אותו אדם. חוכר באותה שורה של בעלים שנוסף,
+ * או בעל שם זהה (ת.ז. אחרת), אינם כפולים; שורות משותפות ממילא נספרות פעם אחת.
  */
 export function isDuplicateIn(all: OwnersByVersion, existing: string[], hash: string): boolean {
-  const versions = Object.keys(all) as VersionId[];
-  const keysOf = (hashes: string[]) =>
-    new Set(versions.flatMap((v) => [...entriesOf(all, v, hashes).keys()]));
-  const candidate = keysOf([hash]);
+  const candidate = allEntries(all, [hash]);
   if (candidate.size === 0) return false;
   return existing.some((other) => {
-    const known = keysOf([other]);
-    return [...candidate].every((k) => known.has(k));
+    const known = allEntries(all, [other]);
+    return known.size === candidate.size && [...candidate.keys()].every((k) => known.has(k));
   });
 }
 
@@ -247,11 +218,6 @@ export function isDuplicate(existing: string[], hash: string): boolean {
 /** האם ל-hash יש החזקות באחת הגרסאות לפחות. */
 export function isFound(hash: string): boolean {
   return VERSION_IDS.some((v) => resolveHoldings(v, hash).length > 0);
-}
-
-/** ראו hasInferredRowsIn. */
-export function hasInferredRows(hash: string): boolean {
-  return hasInferredRowsIn(ALL_OWNERS, hash);
 }
 
 /** האם ה-hash תואם לכמה בעלים שונים (ראו isAmbiguousIn). */

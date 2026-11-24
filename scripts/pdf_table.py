@@ -102,7 +102,8 @@ def parse_number(text, where):
     (שלילי, עשרוני, מספר שבור או שני מספרים) נכשל עם הקשר (where) — עדיף לעצור מאשר לנחש.
     """
     t = text.strip()
-    if t in {"", "-"}:
+    # תא ריק: "", "-", או אפס/ריק בפורמט חשבונאי ("-   ₪", "₪")
+    if re.sub(r"\s+", "", t) in {"", "-", "₪", "-₪"}:
         return None
     m = NUMBER.match(t)
     if not m:
