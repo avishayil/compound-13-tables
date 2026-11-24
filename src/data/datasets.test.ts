@@ -102,13 +102,14 @@ describe('isDuplicateIn — לפי הזכויות שהבעלים מוסיף בפ
     expect(isDuplicateIn(all, ['ID'], 'N')).toBe(true);
   });
 
-  it('ת.ז. מקשרת גם לשורות של אותו שם בלי ת.ז. (כשהשם חד-משמעי) — ולכן השם כפול', () => {
+  it('ת.ז. אינה מושכת שורות של אותו שם בלי ת.ז. (ייתכן שהן של אדם אחר)', () => {
     const all: OwnersByVersion = {
       v1: [h('X', '', '44', '1/250')],
       v2: [h('X', 'IDX', '41', '1/10')],
     };
-    expect(resolveManyIn(all, 'v1', ['IDX']).map((x) => x.plotId)).toEqual(['44']);
-    expect(isDuplicateIn(all, ['IDX'], 'X')).toBe(true);
+    expect(resolveManyIn(all, 'v1', ['IDX'])).toEqual([]);
+    // השם מוסיף שורה שהת.ז. לא כללה — ולכן אינו כפול
+    expect(isDuplicateIn(all, ['IDX'], 'X')).toBe(false);
   });
 
   it('שני חוכרים של אותו בעלים ללא ת.ז. אינם כפולים זה לזה', () => {
@@ -121,8 +122,13 @@ describe('isDuplicateIn — לפי הזכויות שהבעלים מוסיף בפ
     };
     expect(isDuplicateIn(all, ['lesseeA'], 'lesseeB')).toBe(false);
     expect(isDuplicateIn(all, ['lesseeA'], 'owner')).toBe(false);
-    // כל הזכויות של החוכר כבר כלולות דרך הבעלים
-    expect(isDuplicateIn(all, ['owner'], 'lesseeA')).toBe(true);
+    // החוכר הוא אדם אחר מהבעלים — אפשר להוסיף אותו (השורה לא תיספר פעמיים)
+    expect(isDuplicateIn(all, ['owner'], 'lesseeA')).toBe(false);
+  });
+
+  it('הוספה חוזרת של אותו hash — כפולה', () => {
+    const all: OwnersByVersion = { v1: [], v2: [h('N', 'ID', '41', '1/10')] };
+    expect(isDuplicateIn(all, ['N'], 'N')).toBe(true);
   });
 
   it('רשימה ריקה — לא כפול', () => {

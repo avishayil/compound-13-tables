@@ -93,14 +93,24 @@ def owner_bands(page, name_col, data_top, data_bottom):
     return bands
 
 
+NUMBER = re.compile(r"(\(|-)?(\d[\d,]*(?:\.\d+)?)(\))?")
+
+
 def parse_number(text):
-    """מספר מתוך טקסט תא ("1,234,567 ₪", "-12.5", "(1,234)"): מתעלם מרווחים (מספר שנשבר
-    לשתי שורות), מסיר פסיקי אלפים וסימנים, ומעגל לשלם (חצי כלפי מעלה). שלילי: "-" מוביל או
-    סוגריים. מחזיר None אם אין מספר."""
-    compact = re.sub(r"\s+", "", text)
-    m = re.search(r"(\(|-)?(\d[\d,]*(?:\.\d+)?)(\))?", compact)
-    if not m:
+    """מספר מתוך טקסט תא ("1,234,567 ₪", "-12.5", "(1,234)"). מעגל לשלם (חצי כלפי מעלה).
+
+    * מספר שנשבר לשתי שורות אחרי פסיק ("1,234,\n567") מחובר.
+    * סימן שלילי רק כשהוא צמוד לספרות ("-1,234" או "(1,234)") — מקף מפריד בין מילים לא נחשב.
+    * יותר ממספר אחד בתא → ValueError (כדי לא לחבר או לבחור מספר בטעות).
+    מחזיר None אם אין מספר.
+    """
+    joined = re.sub(r",\s+(?=\d)", ",", text)
+    matches = list(NUMBER.finditer(joined))
+    if not matches:
         return None
+    if len(matches) > 1:
+        raise ValueError(f"more than one number in cell: {text!r}")
+    m = matches[0]
     value = Decimal(m.group(2).replace(",", "")).quantize(Decimal(1), rounding=ROUND_HALF_UP)
     negative = m.group(1) == "-" or (m.group(1) == "(" and m.group(3) == ")")
     return -int(value) if negative else int(value)

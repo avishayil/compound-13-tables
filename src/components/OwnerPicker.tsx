@@ -45,8 +45,8 @@ export default function OwnerPicker({ version, owners, onChange }: Props) {
       setStatus('notfound');
       return;
     }
-    // מניעת הוספה כפולה: אם כל הזכויות של הבעלים כבר כלולות (למשל אותו אדם שנוסף פעם לפי
-    // שם ופעם לפי ת.ז., או חוכר שהבעלים שלו כבר נוסף) — אין מה להוסיף.
+    // מניעת הוספה כפולה של אותו אדם (למשל פעם לפי שם ופעם לפי ת.ז.): בעלים שכבר ברשימה
+    // ומתייחס בדיוק לאותן שורות. חוכר של בעלים שנוסף, או אדם אחר באותו שם, ניתנים להוספה.
     if (
       isDuplicate(
         owners.map((o) => o.hash),
@@ -165,7 +165,7 @@ export default function OwnerPicker({ version, owners, onChange }: Props) {
           לפי מספר ת.ז.
         </p>
       )}
-      {status === 'duplicate' && <p className="empty">הזכויות של הבעלים הזה כבר כלולות בחישוב.</p>}
+      {status === 'duplicate' && <p className="empty">הבעלים הזה כבר נוסף לרשימה.</p>}
       {owners.some((o) => o.ambiguous) && (
         <p className="empty">
           השם{' '}
