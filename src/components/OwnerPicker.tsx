@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import {
-  identityKeys,
   isAmbiguous,
-  isDuplicateOwner,
+  isDuplicate,
+  isFound,
   resolveHoldings,
   type VersionId,
 } from '../data/datasets';
@@ -11,11 +11,9 @@ import { normalizeId, normalizeName, sha256Hex } from '../lib/hash';
 
 /** בעלים שנוסף לרשימה: התווית שהמשתמש הקליד וה-hash שחושב ממנה. */
 export interface AddedOwner {
-  /** מזהי הבעלים (hash של ת.ז., או של שם אם אין ת.ז.) בכל הגרסאות — למניעת הוספה כפולה */
-  keys: string[];
   label: string;
   hash: string;
-  /** השם תואם לכמה בעלים שונים (כמה מספרי זהות) — מוצגות הזכויות של כולם */
+  /** השם תואם ליותר ממספר זהות אחד — ייתכן שמדובר בכמה בעלים באותו שם */
   ambiguous: boolean;
 }
 
@@ -43,17 +41,16 @@ export default function OwnerPicker({ version, owners, onChange }: Props) {
     }
     const normalized = mode === 'name' ? normalizeName(raw) : normalizeId(raw);
     const hash = await sha256Hex(normalized);
-    const keys = identityKeys(hash);
-
-    if (keys.length === 0) {
+    if (!isFound(hash)) {
       setStatus('notfound');
       return;
     }
-    // מניעת הוספה כפולה של אותו בעלים — גם אם נוסף פעם לפי שם ופעם לפי ת.ז.
+    // מניעת הוספה כפולה: אם כל הזכויות של הבעלים כבר כלולות (למשל אותו אדם שנוסף פעם לפי
+    // שם ופעם לפי ת.ז., או חוכר שהבעלים שלו כבר נוסף) — אין מה להוסיף.
     if (
-      isDuplicateOwner(
-        owners.map((o) => o.keys),
-        keys,
+      isDuplicate(
+        owners.map((o) => o.hash),
+        hash,
       )
     ) {
       setStatus('duplicate');
@@ -61,7 +58,7 @@ export default function OwnerPicker({ version, owners, onChange }: Props) {
       return;
     }
 
-    onChange([...owners, { keys, label: raw, hash, ambiguous: isAmbiguous(hash) }]);
+    onChange([...owners, { label: raw, hash, ambiguous: isAmbiguous(hash) }]);
     setText('');
     setStatus('idle');
   };
@@ -168,7 +165,7 @@ export default function OwnerPicker({ version, owners, onChange }: Props) {
           לפי מספר ת.ז.
         </p>
       )}
-      {status === 'duplicate' && <p className="empty">הבעלים הזה כבר נוסף לרשימה.</p>}
+      {status === 'duplicate' && <p className="empty">הזכויות של הבעלים הזה כבר כלולות בחישוב.</p>}
       {owners.some((o) => o.ambiguous) && (
         <p className="empty">
           השם{' '}
@@ -176,8 +173,8 @@ export default function OwnerPicker({ version, owners, onChange }: Props) {
             .filter((o) => o.ambiguous)
             .map((o) => `״${o.label}״`)
             .join(', ')}{' '}
-          מופיע בטבלאות אצל יותר מבעלים אחד (מספרי זהות שונים), והחישוב כולל את הזכויות של כולם.
-          לחישוב מדויק — הסירו אותו וחפשו לפי מספר ת.ז.
+          מופיע בטבלאות עם יותר ממספר זהות אחד — ייתכן שמדובר בכמה בעלים באותו שם, והחישוב כולל את
+          כל השורות שבהן השם מופיע. לחישוב מדויק — הסירו אותו וחפשו לפי מספר ת.ז.
         </p>
       )}
       {owners.some((o) => holdingsOf(o).length === 0) && (

@@ -1,9 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   DATASETS,
-  identityKeysIn,
   isAmbiguousIn,
-  isDuplicateOwner,
+  isDuplicateIn,
   ownerRows,
   resolveHoldings,
   resolveManyIn,
@@ -87,24 +86,32 @@ describe('שמות זהים לבעלים שונים (הומונימים)', () =>
     expect(resolveManyIn(all, 'v1', ['N']).map((x) => x.plotId)).toEqual(['44']);
   });
 
-  it('אפשר להוסיף לפי שם אדם בעל שם זהה למי שכבר נוסף לפי ת.ז.', () => {
-    const byId = identityKeysIn(all, 'ID1');
-    const byName = identityKeysIn(all, 'N');
-    expect(isDuplicateOwner([byId], byName)).toBe(false);
+  it('אחרי הוספת שם עמום אפשר להוסיף לפי ת.ז. את אחד מבעלי השם (שורות נוספות שלו)', () => {
+    expect(isDuplicateIn(all, ['N'], 'ID1')).toBe(false);
+  });
+
+  it('אחרי הוספה לפי ת.ז. אפשר להוסיף שם עמום (כולל בעלים נוסף)', () => {
+    expect(isDuplicateIn(all, ['ID1'], 'N')).toBe(false);
   });
 });
 
-describe('isDuplicateOwner', () => {
-  it('כפול רק כשכל המזהים החדשים כבר קיימים', () => {
-    expect(isDuplicateOwner([['a'], ['b']], ['a'])).toBe(true);
-    expect(isDuplicateOwner([['a'], ['b']], ['a', 'b'])).toBe(true);
-    expect(isDuplicateOwner([['a']], ['a', 'c'])).toBe(false);
-    expect(isDuplicateOwner([], ['a'])).toBe(false);
+describe('isDuplicateIn — לפי הזכויות שהבעלים מוסיף בפועל', () => {
+  it('אותו אדם לפי שם ואז לפי ת.ז. — כפול', () => {
+    const all: OwnersByVersion = { v1: [], v2: [h('N', 'ID', '41', '1/10')] };
+    expect(isDuplicateIn(all, ['N'], 'ID')).toBe(true);
+    expect(isDuplicateIn(all, ['ID'], 'N')).toBe(true);
   });
-});
 
-describe('identityKeysIn — זהות הבעלים למניעת הוספה כפולה', () => {
-  it('שני חוכרים של אותו בעלים ללא ת.ז. מקבלים זהויות שונות', () => {
+  it('ת.ז. מקשרת גם לשורות של אותו שם בלי ת.ז. (כשהשם חד-משמעי) — ולכן השם כפול', () => {
+    const all: OwnersByVersion = {
+      v1: [h('X', '', '44', '1/250')],
+      v2: [h('X', 'IDX', '41', '1/10')],
+    };
+    expect(resolveManyIn(all, 'v1', ['IDX']).map((x) => x.plotId)).toEqual(['44']);
+    expect(isDuplicateIn(all, ['IDX'], 'X')).toBe(true);
+  });
+
+  it('שני חוכרים של אותו בעלים ללא ת.ז. אינם כפולים זה לזה', () => {
     const all: OwnersByVersion = {
       v1: [],
       v2: [
@@ -112,17 +119,15 @@ describe('identityKeysIn — זהות הבעלים למניעת הוספה כפ�
         h('owner', '', '112', '1/2', 'lesseeB', ''),
       ],
     };
-    const a = identityKeysIn(all, 'lesseeA');
-    const b = identityKeysIn(all, 'lesseeB');
-    const owner = identityKeysIn(all, 'owner');
-    expect(a).toEqual(['aid']);
-    expect(b).toEqual(['lesseeB']);
-    expect(owner).toEqual(['owner']);
+    expect(isDuplicateIn(all, ['lesseeA'], 'lesseeB')).toBe(false);
+    expect(isDuplicateIn(all, ['lesseeA'], 'owner')).toBe(false);
+    // כל הזכויות של החוכר כבר כלולות דרך הבעלים
+    expect(isDuplicateIn(all, ['owner'], 'lesseeA')).toBe(true);
   });
 
-  it('אותו אדם לפי שם ולפי ת.ז. מקבל אותה זהות', () => {
+  it('רשימה ריקה — לא כפול', () => {
     const all: OwnersByVersion = { v1: [], v2: [h('N', 'ID', '41', '1/10')] };
-    expect(identityKeysIn(all, 'N')).toEqual(identityKeysIn(all, 'ID'));
+    expect(isDuplicateIn(all, [], 'N')).toBe(false);
   });
 });
 
@@ -143,9 +148,7 @@ describe('נתונים אמיתיים — חוכרים ב-v2', () => {
   });
 
   it('שני חוכרים שונים של אותו בעלים אינם נחשבים כפולים', () => {
-    const keysA = identityKeysIn(all, rowA!.altNameHash);
-    const keysB = identityKeysIn(all, rowB!.altNameHash);
-    expect(isDuplicateOwner([keysA], keysB)).toBe(false);
+    expect(isDuplicateIn(all, [rowA!.altNameHash], rowB!.altNameHash)).toBe(false);
   });
 
   it('הוספת הבעלים והחוכר של אותה שורה לא מכפילה את הזכויות בחישוב', () => {

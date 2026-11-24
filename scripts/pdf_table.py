@@ -9,6 +9,7 @@
 """
 import re
 from collections import defaultdict
+from decimal import ROUND_HALF_UP, Decimal
 
 LTR_RUN = re.compile(r"[0-9A-Za-z.,/\-]+")
 
@@ -93,12 +94,16 @@ def owner_bands(page, name_col, data_top, data_bottom):
 
 
 def parse_number(text):
-    """מספר מתוך טקסט תא ("1,234,567 ₪", "12.5"): מסיר פסיקי אלפים וסימנים, מעגל לשלם.
-    מחזיר None אם אין מספר."""
-    m = re.search(r"\d[\d,]*(?:\.\d+)?", text)
+    """מספר מתוך טקסט תא ("1,234,567 ₪", "-12.5", "(1,234)"): מתעלם מרווחים (מספר שנשבר
+    לשתי שורות), מסיר פסיקי אלפים וסימנים, ומעגל לשלם (חצי כלפי מעלה). שלילי: "-" מוביל או
+    סוגריים. מחזיר None אם אין מספר."""
+    compact = re.sub(r"\s+", "", text)
+    m = re.search(r"(\(|-)?(\d[\d,]*(?:\.\d+)?)(\))?", compact)
     if not m:
         return None
-    return round(float(m.group(0).replace(",", "")))
+    value = Decimal(m.group(2).replace(",", "")).quantize(Decimal(1), rounding=ROUND_HALF_UP)
+    negative = m.group(1) == "-" or (m.group(1) == "(" and m.group(3) == ")")
+    return -int(value) if negative else int(value)
 
 
 def find_header(page, x0, min_height, page_no):
