@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""חילוץ נתוני הבעלים מ-named_tables.pdf אל public/owners.csv — בצורה אנונימית.
+"""חילוץ נתוני הבעלים של גרסה v1 (מופקדת, יוני 2026) מ-named_tables.pdf אל public/data/v1/owners.csv — בצורה אנונימית.
 
 פרטיות: הקובץ הציבורי לא מכיל שמות או מספרי זהות בטקסט גלוי. במקום זאת נשמרים
 **hashes** (SHA-256) של השם ושל מספר הזהות, כך שחיפוש בצד-לקוח עובד (המשתמש מקליד את
@@ -12,16 +12,18 @@
 אימות: סכום השברים של כל מגרש צריך להיות 1.0 בדיוק.
 """
 import csv
-import hashlib
+import os
 import re
 import sys
-import unicodedata
 from collections import defaultdict
 
 import pdfplumber
 
-PDF_PATH = "public/named_tables.pdf"
-CSV_PATH = "public/owners.csv"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from owner_hash import normalize_id, normalize_name, sha  # noqa: E402
+
+PDF_PATH = "sources/v1/named_tables.pdf"
+CSV_PATH = "public/data/v1/owners.csv"
 
 # טווחי-y (top) לכל אחד מ-5 ה-slots: (טווח השבר, טווח מספר המגרש)
 SLOTS = [
@@ -33,23 +35,6 @@ SLOTS = [
 ]
 NAME_BAND = (715, 729)
 ID_BAND = (696, 711)
-
-
-def normalize_name(name):
-    """נרמול שם לפני hashing: רווחים מצומצמים, גרשיים אחידים."""
-    name = unicodedata.normalize("NFKC", name)
-    name = name.replace("״", '"').replace("׳", "'")
-    return re.sub(r"\s+", " ", name).strip()
-
-
-def normalize_id(raw):
-    """נרמול מס׳ זהות: השארת ספרות/אותיות בלבד; ריק אם אין."""
-    cleaned = re.sub(r"[^0-9A-Za-z]", "", raw)
-    return cleaned or None
-
-
-def sha(value):
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def parse_page(page):

@@ -42,9 +42,11 @@ export interface RightsResult {
   relativeResidentialArea: number;
   equivalentUnits: number;
   relativeCommercialGround: number;
-  relativeCommercialFirst: number;
+  relativeCommercialUpper: number;
   relativeCommercialTotal: number;
   relativeTotalBuildRights: number;
+  /** שווי יחסי (₪) = שבר × שווי המגרש בטבלת השמאי. אינו שומה. */
+  relativeValue: number;
 }
 
 /**
@@ -58,8 +60,8 @@ export function calculateRights(lot: Lot, share: number, quantity: number): Righ
 
   const effectiveShare = share * quantity;
   const relativeCommercialGround = lot.commercialGroundFloorArea * effectiveShare;
-  const relativeCommercialFirst = lot.commercialFirstFloorArea * effectiveShare;
-  const relativeCommercialTotal = relativeCommercialGround + relativeCommercialFirst;
+  const relativeCommercialUpper = lot.commercialUpperArea * effectiveShare;
+  const relativeCommercialTotal = relativeCommercialGround + relativeCommercialUpper;
   const relativeResidentialArea = lot.residentialPaldelletArea * effectiveShare;
 
   return {
@@ -69,15 +71,21 @@ export function calculateRights(lot: Lot, share: number, quantity: number): Righ
     relativeResidentialArea,
     equivalentUnits: lot.housingUnits * effectiveShare,
     relativeCommercialGround,
-    relativeCommercialFirst,
+    relativeCommercialUpper,
     relativeCommercialTotal,
     relativeTotalBuildRights: relativeResidentialArea + relativeCommercialTotal,
+    relativeValue: lot.lotValue * effectiveShare,
   };
 }
 
 /** עיגול לתצוגה — שטחים ל-2 ספרות. */
 export function roundArea(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+/** עיגול לתצוגה — שווי לשקל שלם. */
+export function roundCurrency(value: number): number {
+  return Math.round(value);
 }
 
 /** עיגול לתצוגה — יח״ד אקוויוולנטיות ל-4 ספרות. */

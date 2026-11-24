@@ -1,45 +1,44 @@
 import { useState } from 'react';
-import { getHoldingsByHash, type OwnerHolding } from '../data/owners';
+import { resolveHoldings, VERSION_IDS, type VersionId } from '../data/datasets';
+import type { OwnerHolding } from '../data/owners';
 import { normalizeId, normalizeName, sha256Hex } from '../lib/hash';
 
+/** בעלים שנוסף לרשימה: התווית שהמשתמש הקליד וה-hash שחושב ממנה. */
+export interface AddedOwner {
+  /** מזהי הבעלים (hash של ת.ז., או של שם אם אין ת.ז.) בכל הגרסאות — למניעת הוספה כפולה */
+  keys: string[];
+  label: string;
+  hash: string;
+}
+
 interface Props {
-  /** נקרא עם כל ההחזקות המאוחדות של הבעלים שנוספו (ריק = אין). */
-  onResult: (holdings: OwnerHolding[]) => void;
+  /** הגרסה הפעילה — ההחזקות המוצגות בשבבים נלקחות ממנה */
+  version: VersionId;
+  owners: AddedOwner[];
+  onChange: (owners: AddedOwner[]) => void;
 }
 
 type SearchMode = 'name' | 'id';
 
-/** בעלים שנוסף לרשימה: התווית שהמשתמש הקליד, זהות הבעלים, וההחזקות. */
-interface AddedOwner {
-  key: string;
-  label: string;
-  holdings: OwnerHolding[];
-}
-
 /**
- * זהות הבעלים = שילוב ה-hash של השם וה-hash של הת.ז.
+ * מזהי הבעלים בכל הגרסאות: hash של ת.ז. (או של שם, אם אין ת.ז.) של כל החזקה שנמצאה.
  * משמש למניעת הוספה כפולה של אותו בעלים (גם אם נוסף פעם לפי שם ופעם לפי ת.ז.).
  * הערה: החזקות כפולות *בתוך* אותו בעלים הן לגיטימיות (זכויות נפרדות) ונשמרות כפי שהן.
  */
-function ownerIdentity(holdings: OwnerHolding[]): string {
-  const first = holdings[0];
-  return `${first.nameHash}|${first.idHash}`;
+function ownerKeys(hash: string): string[] {
+  const keys = new Set<string>();
+  for (const v of VERSION_IDS) {
+    for (const h of resolveHoldings(v, hash)) keys.add(h.idHash || h.nameHash);
+  }
+  return [...keys];
 }
 
-export default function OwnerPicker({ onResult }: Props) {
+export default function OwnerPicker({ version, owners, onChange }: Props) {
   const [mode, setMode] = useState<SearchMode>('name');
   const [text, setText] = useState('');
-  const [owners, setOwners] = useState<AddedOwner[]>([]);
-  const [status, setStatus] = useState<'idle' | 'notfound' | 'duplicate'>('idle');
+  const [status, setStatus] = useState<'idle' | 'notfound' | 'duplicate' | 'otherversion'>('idle');
 
-  /**
-   * מאחד את כל ההחזקות של הבעלים שנוספו ומדווח למעלה.
-   * אין מסירת כפילויות ברמת ההחזקה — שורות כפולות לאותו בעלים הן זכויות נפרדות לגיטימיות.
-   * הוספה כפולה של אותו בעלים נמנעת מראש (לפי זהות הבעלים) בעת ההוספה.
-   */
-  const publish = (list: AddedOwner[]) => {
-    onResult(list.flatMap((o) => o.holdings));
-  };
+  const holdingsOf = (o: AddedOwner): OwnerHolding[] => resolveHoldings(version, o.hash);
 
   const handleAdd = async () => {
     const raw = text.trim();
@@ -49,38 +48,33 @@ export default function OwnerPicker({ onResult }: Props) {
     }
     const normalized = mode === 'name' ? normalizeName(raw) : normalizeId(raw);
     const hash = await sha256Hex(normalized);
-    const holdings = getHoldingsByHash(hash);
+    const keys = ownerKeys(hash);
 
-    if (holdings.length === 0) {
+    if (keys.length === 0) {
       setStatus('notfound');
       return;
     }
     // מניעת הוספה כפולה של אותו בעלים — גם אם נוסף פעם לפי שם ופעם לפי ת.ז.
-    const identity = ownerIdentity(holdings);
-    if (owners.some((o) => o.key === identity)) {
+    if (owners.some((o) => o.keys.some((k) => keys.includes(k)))) {
       setStatus('duplicate');
       setText('');
       return;
     }
 
-    const next = [...owners, { key: identity, label: raw, holdings }];
-    setOwners(next);
-    publish(next);
+    onChange([...owners, { keys, label: raw, hash }]);
     setText('');
-    setStatus('idle');
+    setStatus(resolveHoldings(version, hash).length === 0 ? 'otherversion' : 'idle');
   };
 
-  const handleRemoveOwner = (key: string) => {
-    const next = owners.filter((o) => o.key !== key);
-    setOwners(next);
-    publish(next);
+  const handleRemoveOwner = (hash: string) => {
+    onChange(owners.filter((o) => o.hash !== hash));
   };
 
   /** מספר המגרשים הייחודיים שבהם לבעלים יש זכויות. */
   const countPlots = (holdings: OwnerHolding[]) => new Set(holdings.map((h) => h.plotId)).size;
 
   // מספר המגרשים הייחודיים על פני כל הבעלים שנוספו
-  const totalPlots = countPlots(owners.flatMap((o) => o.holdings));
+  const totalPlots = countPlots(owners.flatMap(holdingsOf));
 
   /** ניסוח עברי תקין: "מגרש אחד" / "N מגרשים". */
   const plotsLabel = (n: number) => (n === 1 ? 'מגרש אחד' : `${n} מגרשים`);
@@ -91,8 +85,8 @@ export default function OwnerPicker({ onResult }: Props) {
 
       <p className="owner-hint">
         החיפוש מתבצע על המכשיר שלכם בלבד. השמות ומספרי הזהות אינם נשמרים באפליקציה — נשמרת רק חתימה
-        מוצפנת (hash), כך שאין חשיפה של פרטים אישיים. אפשר להוסיף כמה בעלים יחד (למשל בני זוג) והחישוב
-        יסכם את כולם.
+        מוצפנת (hash), כך שאין חשיפה של פרטים אישיים. אפשר להוסיף כמה בעלים יחד (למשל בני זוג)
+        והחישוב יסכם את כולם.
       </p>
 
       <div className="mode-toggle" role="radiogroup" aria-label="סוג חיפוש">
@@ -140,21 +134,26 @@ export default function OwnerPicker({ onResult }: Props) {
 
       {owners.length > 0 && (
         <div className="owner-chips">
-          {owners.map((o) => (
-            <span className="owner-chip" key={o.key}>
-              <span className="owner-chip-label">
-                {o.label} <small>({plotsLabel(countPlots(o.holdings))})</small>
+          {owners.map((o) => {
+            const n = countPlots(holdingsOf(o));
+            return (
+              <span className="owner-chip" key={o.hash}>
+                <span
+                  className={n === 0 ? 'owner-chip-label owner-chip-missing' : 'owner-chip-label'}
+                >
+                  {o.label} <small>({n === 0 ? 'לא נמצא בגרסה זו' : plotsLabel(n)})</small>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveOwner(o.hash)}
+                  aria-label={`הסר ${o.label}`}
+                  title="הסר"
+                >
+                  ✕
+                </button>
               </span>
-              <button
-                type="button"
-                onClick={() => handleRemoveOwner(o.key)}
-                aria-label={`הסר ${o.label}`}
-                title="הסר"
-              >
-                ✕
-              </button>
-            </span>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -170,6 +169,11 @@ export default function OwnerPicker({ onResult }: Props) {
         </p>
       )}
       {status === 'duplicate' && <p className="empty">הבעלים הזה כבר נוסף לרשימה.</p>}
+      {status === 'otherversion' && (
+        <p className="empty">
+          הבעלים נמצא רק בגרסה האחרת של הטבלאות. החליפו גרסה למעלה כדי לראות את הזכויות.
+        </p>
+      )}
     </div>
   );
 }

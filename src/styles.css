@@ -362,10 +362,71 @@ button {
   word-break: break-word;
 }
 
-/* עמודת הייעוד מיושרת לימין */
-.results-table th:nth-child(1),
-.results-table td:nth-child(1) {
+/* עמודת הייעוד ותוויות שורות הסיכום מיושרות לימין */
+.results-table .col-zoning,
+.results-table .row-subtotal td:first-child,
+.results-table .row-total td:first-child {
   text-align: right;
+}
+
+.results-table th.col-lot {
+  width: 4.5em;
+}
+
+.results-version {
+  margin: -6px 0 12px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* מתג גרסת הטבלאות */
+.version-card {
+  padding: 12px;
+}
+
+.version-card .version-title {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.owner-chip-missing {
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+
+/* השוואה בין גרסאות */
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.compare-table th,
+.compare-table td {
+  padding: 8px 6px;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.compare-table th:first-child,
+.compare-table td:first-child {
+  text-align: right;
+}
+
+.compare-table .delta-up {
+  color: #047857;
+}
+
+.compare-table .delta-down {
+  color: #b91c1c;
+}
+
+.compare-note {
+  margin: 10px 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
 }
 
 .results-table thead th {
@@ -446,6 +507,16 @@ button {
 
 .disclaimer p {
   margin: 0 0 8px;
+}
+
+.disclaimer .sources {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+
+.disclaimer .sources li {
+  margin: 2px 0;
 }
 
 .disclaimer p:last-child {

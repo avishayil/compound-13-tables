@@ -1,13 +1,15 @@
 import type { ComputedRow } from './rows';
-import { roundArea, roundUnits } from './calc';
+import { roundArea, roundCurrency, roundUnits } from './calc';
 
 const HEADERS = [
+  'מגרש',
   'ייעוד',
   'שבר',
   'כמות',
   'סה״כ מגורים (מ״ר)',
   'זכות רעיונית לדירה',
-  'סה״כ מסחר (מ״ר)',
+  'סה״כ מסחר ותעסוקה (מ״ר)',
+  'שווי יחסי (₪)',
 ];
 
 function escapeCell(value: string | number): string {
@@ -25,12 +27,14 @@ export function buildCsv(rows: ComputedRow[]): string {
     const r = row.result;
     lines.push(
       [
+        row.lot.id,
         row.lot.zoning,
         row.shareInput,
         row.quantity,
         roundArea(r.relativeResidentialArea),
         roundUnits(r.equivalentUnits),
         roundArea(r.relativeCommercialTotal),
+        roundCurrency(r.relativeValue),
       ]
         .map(escapeCell)
         .join(','),

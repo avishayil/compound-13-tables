@@ -1,14 +1,15 @@
-import { LOTS } from '../data/lots';
+import type { Dataset } from '../data/datasets';
 import type { RightRow } from '../lib/rows';
 
 interface Props {
+  dataset: Dataset;
   rows: RightRow[];
   onChange: (id: string, patch: Partial<RightRow>) => void;
   onAdd: () => void;
   onRemove: (id: string) => void;
 }
 
-export default function RightsForm({ rows, onChange, onAdd, onRemove }: Props) {
+export default function RightsForm({ dataset, rows, onChange, onAdd, onRemove }: Props) {
   return (
     <div className="card">
       <h2>הזנת זכויות</h2>
@@ -21,9 +22,9 @@ export default function RightsForm({ rows, onChange, onAdd, onRemove }: Props) {
               <span>מגרש</span>
               <select
                 value={row.lotId}
-                onChange={(e) => onChange(row.id, { lotId: Number(e.target.value) })}
+                onChange={(e) => onChange(row.id, { lotId: e.target.value })}
               >
-                {LOTS.map((lot) => (
+                {dataset.lots.map((lot) => (
                   <option key={lot.id} value={lot.id}>
                     מגרש {lot.id} — {lot.zoning}
                   </option>

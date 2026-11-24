@@ -1,39 +1,57 @@
-// מקור האמת לנתוני הבעלים הוא קובץ owners.csv (חילוץ אנונימי של named_tables.pdf).
+// נתוני הבעלים של כל גרסה נמצאים ב-public/data/<version>/owners.csv (חילוץ אנונימי של named_tables.pdf).
 // לפרטיות, הקובץ מכיל רק hashes (SHA-256) של שם הבעלים ומספר הזהות — אין PII גלוי.
-// הקובץ נטען כאן בזמן build ומפוענח ל-OWNERS.
-import ownersCsv from '../../public/owners.csv?raw';
+import { parseCsv } from '../lib/csvParse';
 
-/** החזקה בודדת: hash של שם + hash של ת.ז., מס׳ מגרש, ושבר הזכות. */
+/**
+ * החזקה בודדת: hashes של שם ות.ז. הבעלים, hashes של שם ות.ז. החוכר (אם יש; אחרת ''),
+ * מס׳ מגרש ושבר הזכות.
+ */
 export interface OwnerHolding {
   nameHash: string;
   idHash: string;
-  plotId: number;
+  altNameHash: string;
+  altIdHash: string;
+  plotId: string;
   fraction: string;
 }
 
-/** מפענח את תוכן owners.csv לרשימת החזקות. עמודות: nameHash, idHash, plotId, fraction. */
+/**
+ * מפענח את תוכן owners.csv לרשימת החזקות. שני פורמטים נתמכים:
+ * v1 — nameHash, idHash, plotId, fraction
+ * v2 — nameHash, idHash, altNameHash, altIdHash, plotId, fraction
+ */
 export function parseOwnersCsv(csv: string): OwnerHolding[] {
-  const lines = csv
-    .replace(/^﻿/, '')
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 0);
-
-  // דילוג על שורת הכותרת
-  return lines.slice(1).map((line) => {
-    const cols = line.split(',');
-    return {
-      nameHash: cols[0].trim(),
-      idHash: cols[1].trim(),
-      plotId: Number(cols[2].trim()),
-      fraction: cols[3].trim(),
-    };
+  const [header, ...rows] = parseCsv(csv);
+  const withAlt = header.length >= 6;
+  return rows.map((cols) => {
+    const c = cols.map((v) => v.trim());
+    return withAlt
+      ? {
+          nameHash: c[0],
+          idHash: c[1],
+          altNameHash: c[2],
+          altIdHash: c[3],
+          plotId: c[4],
+          fraction: c[5],
+        }
+      : {
+          nameHash: c[0],
+          idHash: c[1],
+          altNameHash: '',
+          altIdHash: '',
+          plotId: c[2],
+          fraction: c[3],
+        };
   });
 }
 
-export const OWNERS: OwnerHolding[] = parseOwnersCsv(ownersCsv);
+/** האם ההחזקה שייכת ל-hash נתון (שם/ת.ז. של הבעלים או של החוכר). */
+export function holdingMatches(o: OwnerHolding, hash: string): boolean {
+  return o.nameHash === hash || o.idHash === hash || o.altNameHash === hash || o.altIdHash === hash;
+}
 
-/** כל ההחזקות התואמות ל-hash נתון (של שם או של ת.ז.). */
-export function getHoldingsByHash(hash: string): OwnerHolding[] {
+/** כל ההחזקות התואמות ל-hash נתון. hash ריק אינו מתאים לשום דבר. */
+export function findHoldings(owners: OwnerHolding[], hash: string): OwnerHolding[] {
   if (!hash) return [];
-  return OWNERS.filter((o) => o.nameHash === hash || o.idHash === hash);
+  return owners.filter((o) => holdingMatches(o, hash));
 }

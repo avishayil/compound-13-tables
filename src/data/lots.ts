@@ -1,10 +1,10 @@
-// מקור האמת לנתוני המגרשים הוא קובץ plots.csv (חילוץ של plots.pdf).
-// הקובץ נטען כאן בזמן build ומפוענח ל-LOTS — אין להזין נתונים ידנית כאן.
-import plotsCsv from '../../public/plots.csv?raw';
+// נתוני המגרשים של כל גרסה נמצאים ב-public/data/<version>/plots.csv (חילוץ של plots.pdf).
+// הקבצים נטענים ב-datasets.ts — אין להזין נתונים ידנית כאן.
+import { parseCsv } from '../lib/csvParse';
 
 export interface Lot {
-  /** מס׳ מגרש */
-  id: number;
+  /** מס׳ מגרש (מחרוזת — בגרסת 106(ב) יש מגרשים מפוצלים כמו 40A/40B) */
+  id: string;
   /** שטח המגרש (מ״ר) */
   lotArea: number;
   /** ייעוד */
@@ -13,10 +13,17 @@ export interface Lot {
   residentialPaldelletArea: number;
   /** כמות יח״ד */
   housingUnits: number;
-  /** שטח למסחר/תעסוקה בקומת קרקע (מ״ר) */
+  /** שטח למסחר בקומת קרקע (מ״ר; בגרסת 106(ב) — שטח עיקרי) */
   commercialGroundFloorArea: number;
-  /** שטח למסחר/תעסוקה בקומה ראשונה מעל קומת קרקע (מ״ר) */
-  commercialFirstFloorArea: number;
+  /**
+   * שטח למסחר/תעסוקה בקומות שמעל קומת הקרקע (מ״ר).
+   * מופקדת: מסחר בקומה ראשונה. 106(ב): שטח ברוטו למשרדים/מסחר בקומות עליונות.
+   */
+  commercialUpperArea: number;
+  /** מבני ציבור בבנייה ורטיקלית (מ״ר) — נבנים ע״י בעל הקרקע ונרשמים על שם הרשות; לא מיוחסים לבעלים */
+  publicBuildingArea: number;
+  /** סה״כ שווי המגרש (₪) לפי טבלת השמאי */
+  lotValue: number;
 }
 
 function num(value: string): number {
@@ -25,28 +32,23 @@ function num(value: string): number {
 
 /** מפענח את תוכן plots.csv לרשימת מגרשים. עמודות לפי סדר הכותרת בקובץ. */
 export function parseLotsCsv(csv: string): Lot[] {
-  const lines = csv
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-
   // דילוג על שורת הכותרת
-  return lines.slice(1).map((line) => {
-    const cols = line.split(',');
-    return {
-      id: num(cols[0]),
+  return parseCsv(csv)
+    .slice(1)
+    .map((cols) => ({
+      id: cols[0].trim(),
       lotArea: num(cols[1]),
       zoning: cols[2].trim(),
       residentialPaldelletArea: num(cols[3]),
       housingUnits: num(cols[4]),
       commercialGroundFloorArea: num(cols[5]),
-      commercialFirstFloorArea: num(cols[6]),
-    };
-  });
+      commercialUpperArea: num(cols[6]),
+      publicBuildingArea: num(cols[7]),
+      lotValue: num(cols[8]),
+    }));
 }
 
-export const LOTS: Lot[] = parseLotsCsv(plotsCsv);
-
-export function getLotById(id: number): Lot | undefined {
-  return LOTS.find((lot) => lot.id === id);
+/** מיון טבעי של מזהי מגרשים: לפי המספר, ואז לפי האות (40A < 40B < 41 < 100). */
+export function compareLotIds(a: string, b: string): number {
+  return a.localeCompare(b, 'en', { numeric: true });
 }

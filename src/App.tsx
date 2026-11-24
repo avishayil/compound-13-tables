@@ -1,73 +1,89 @@
 import { useMemo, useState } from 'react';
 import RightsForm from './components/RightsForm';
 import ResultsTable from './components/ResultsTable';
-import OwnerPicker from './components/OwnerPicker';
-import { getLotById, LOTS } from './data/lots';
-import type { OwnerHolding } from './data/owners';
-import { computeRow, isError, type ComputedRow, type RightRow, type RowError } from './lib/rows';
+import OwnerPicker, { type AddedOwner } from './components/OwnerPicker';
+import VersionCompare from './components/VersionCompare';
+import {
+  DATASETS,
+  DEFAULT_VERSION,
+  VERSION_IDS,
+  resolveHoldings,
+  type VersionId,
+} from './data/datasets';
+import { computeRows, holdingsToRows, type RightRow } from './lib/rows';
+
+const MAVAT_URL = 'https://mavat.iplan.gov.il/SV4/1/3005361928/310';
 
 let rowCounter = 0;
-function newRow(): RightRow {
+function newRow(version: VersionId): RightRow {
   rowCounter += 1;
-  return { id: `row-${rowCounter}`, lotId: LOTS[0].id, shareInput: '', quantity: '1' };
+  return {
+    id: `row-${rowCounter}`,
+    lotId: DATASETS[version].lots[0].id,
+    shareInput: '',
+    quantity: '1',
+  };
 }
 
 type Mode = 'fraction' | 'name';
 
-/** מחשב את כל השורות התקינות ומחזיר תוצאות + שגיאות. */
-function computeRows(rows: RightRow[]): { computed: ComputedRow[]; errors: RowError[] } {
-  const computed: ComputedRow[] = [];
-  const errors: RowError[] = [];
-  for (const row of rows) {
-    if (row.shareInput.trim() === '') continue; // דילוג על שורות ריקות
-    const lot = getLotById(row.lotId);
-    if (!lot) continue;
-    const res = computeRow(row, lot);
-    if (isError(res)) errors.push(res);
-    else computed.push(res);
+/** איפה מוצאים את השמות בכל גרסה — הצעד הראשון בהוראות. */
+function findYourselfStep(version: VersionId) {
+  const link = (
+    <a href={MAVAT_URL} target="_blank" rel="noreferrer">
+      פתחו את אתר התכנית הרשמי (מבא"ת)
+    </a>
+  );
+  if (version === 'v1') {
+    return (
+      <li>
+        קודם מצאו את עצמכם בטבלאות: {link} ונווטו אל: <strong>מסמכי התכנית</strong> ←{' '}
+        <strong>מסמכים מופקדים</strong> ← <strong>נספחים</strong> ←{' '}
+        <strong>טבלאות איזון והקצאה</strong>. שם, בעמודים 69–75, מופיעים שמות הבעלים — חפשו את שמכם.
+      </li>
+    );
   }
-  return { computed, errors };
+  return (
+    <li>
+      קודם מצאו את עצמכם בטבלאות: {link} ופתחו את <strong>טבלאות האיזון וההקצאה</strong> המעודכנות
+      (עדכון לפי סעיף 106(ב), נובמבר 2026 — קובץ של 12 עמודים). חפשו את שמכם בעמודות{' '}
+      <strong>שם הבעלים</strong> או <strong>שם החוכר</strong>.
+    </li>
+  );
 }
 
 export default function App() {
   const [mode, setMode] = useState<Mode>('name');
+  const [version, setVersion] = useState<VersionId>(DEFAULT_VERSION);
+  const dataset = DATASETS[version];
 
-  // מצב "לפי שבר" — שורות שהמשתמש מזין ידנית
-  const [rows, setRows] = useState<RightRow[]>([newRow()]);
+  // מצב "לפי שבר" — שורות שהמשתמש מזין ידנית (מגרשים שונים בכל גרסה)
+  const [rows, setRows] = useState<RightRow[]>([newRow(DEFAULT_VERSION)]);
 
-  // מצב "לפי שם" — החזקות שנמצאו ע"פ hash, מומרות לשורות חישוב
-  const [ownerRows, setOwnerRows] = useState<RightRow[]>([]);
+  // מצב "לפי שם" — בעלים שנוספו (לפי hash); ההחזקות נגזרות מהגרסה הפעילה
+  const [owners, setOwners] = useState<AddedOwner[]>([]);
 
-  const manual = useMemo(() => computeRows(rows), [rows]);
-  const owner = useMemo(() => computeRows(ownerRows), [ownerRows]);
+  const manual = useMemo(() => computeRows(dataset, rows), [dataset, rows]);
+  const owner = useMemo(
+    () =>
+      computeRows(dataset, holdingsToRows(owners.flatMap((o) => resolveHoldings(version, o.hash)))),
+    [dataset, version, owners],
+  );
+
+  const handleVersion = (next: VersionId) => {
+    if (next === version) return;
+    setVersion(next);
+    // מספרי המגרשים שונים בין הגרסאות — השורות הידניות מתאפסות
+    setRows([newRow(next)]);
+  };
 
   const handleChange = (id: string, patch: Partial<RightRow>) =>
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  const handleAdd = () => setRows((prev) => [...prev, newRow()]);
+  const handleAdd = () => setRows((prev) => [...prev, newRow(version)]);
   const handleRemove = (id: string) =>
     setRows((prev) => (prev.length === 1 ? prev : prev.filter((r) => r.id !== id)));
 
-  const handleOwnerResult = (holdings: OwnerHolding[]) => {
-    // קיבוץ החזקות זהות (אותו מגרש + אותו שבר) לשורה אחת עם כמות מצטברת
-    const grouped = new Map<string, { lotId: number; fraction: string; quantity: number }>();
-    for (const h of holdings) {
-      const key = `${h.plotId}|${h.fraction}`;
-      const existing = grouped.get(key);
-      if (existing) {
-        existing.quantity += 1;
-      } else {
-        grouped.set(key, { lotId: h.plotId, fraction: h.fraction, quantity: 1 });
-      }
-    }
-    setOwnerRows(
-      [...grouped.values()].map((g, i) => ({
-        id: `owner-${i}`,
-        lotId: g.lotId,
-        shareInput: g.fraction,
-        quantity: String(g.quantity),
-      })),
-    );
-  };
+  const base = import.meta.env.BASE_URL;
 
   const activeComputed = mode === 'fraction' ? manual.computed : owner.computed;
   const errorByRowIndex = rows
@@ -87,19 +103,7 @@ export default function App() {
         <div className="card instructions">
           <h2>איך זה עובד? 🙂</h2>
           <ol>
-            <li>
-              קודם מצאו את עצמכם בטבלאות:{' '}
-              <a
-                href="https://mavat.iplan.gov.il/SV4/1/3005361928/310"
-                target="_blank"
-                rel="noreferrer"
-              >
-                פתחו את אתר התכנית הרשמי (מבא"ת)
-              </a>{' '}
-              ונווטו אל: <strong>מסמכי התכנית</strong> ← <strong>מסמכים מופקדים</strong> ←{' '}
-              <strong>נספחים</strong> ← <strong>טבלאות איזון והקצאה</strong>. שם, בעמודים 69–75,
-              מופיעים שמות הבעלים — חפשו את שמכם.
-            </li>
+            {findYourselfStep(version)}
             <li>
               הדרך הקלה: בחרו <strong>״לפי שם״</strong> והקלידו את שמכם המלא (או מספר ת.ז.) — נמצא
               אוטומטית את כל המגרשים והשברים שלכם ונחשב הכול. אפשר להוסיף עוד בעלים (למשל בני זוג)
@@ -110,10 +114,33 @@ export default function App() {
               1/250). אפשר להוסיף כמה שורות.
             </li>
             <li>
-              לא מוצאים את עצמכם? נסו להקליד את השם בדיוק כפי שמופיע במסמכי התכנית (כולל סדר המילים),
-              או חפשו לפי מספר ת.ז.
+              יש שתי גרסאות של הטבלאות: <strong>המופקדת</strong> (יוני 2026) ו
+              <strong>העדכון לפי סעיף 106(ב)</strong> (נובמבר 2026), שבו חלק מהמגרשים פוצלו (למשל
+              40A ו-40B). בחרו גרסה למעלה — בחיפוש לפי שם תוצג גם השוואה בין הגרסאות.
+            </li>
+            <li>
+              לא מוצאים את עצמכם? נסו להקליד את השם בדיוק כפי שמופיע במסמכי התכנית (כולל סדר
+              המילים), או חפשו לפי מספר ת.ז.
             </li>
           </ol>
+        </div>
+
+        <div className="card version-card">
+          <p className="version-title">גרסת הטבלאות</p>
+          <div className="mode-toggle" role="radiogroup" aria-label="גרסת הטבלאות">
+            {VERSION_IDS.map((v) => (
+              <button
+                key={v}
+                type="button"
+                role="radio"
+                aria-checked={version === v}
+                className={version === v ? 'active' : ''}
+                onClick={() => handleVersion(v)}
+              >
+                {DATASETS[v].label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="card mode-card">
@@ -140,10 +167,11 @@ export default function App() {
         </div>
 
         {mode === 'name' ? (
-          <OwnerPicker onResult={handleOwnerResult} />
+          <OwnerPicker version={version} owners={owners} onChange={setOwners} />
         ) : (
           <>
             <RightsForm
+              dataset={dataset}
               rows={rows}
               onChange={handleChange}
               onAdd={handleAdd}
@@ -164,26 +192,49 @@ export default function App() {
           </>
         )}
 
-        <ResultsTable rows={activeComputed} />
+        <ResultsTable rows={activeComputed} dataset={dataset} />
+
+        {mode === 'name' && <VersionCompare owners={owners} />}
       </main>
 
       <footer className="disclaimer">
         <p>
           נתוני המגרשים מבוססים על חילוץ ל-CSV מתוך קובץ ה-PDF של טבלאות האיזון וההקצאה. נתוני
-          הבעלים נשמרים באופן אנונימי בלבד (חתימת hash, ללא שמות או מספרי זהות גלויים). ניתן לאמת
-          את נתוני המגרשים מול המקור:{' '}
-          <a href={`${import.meta.env.BASE_URL}plots.pdf`} target="_blank" rel="noreferrer">
-            PDF מגרשים
-          </a>{' '}
-          |{' '}
-          <a href={`${import.meta.env.BASE_URL}plots.csv`} target="_blank" rel="noreferrer">
-            CSV מגרשים
-          </a>
-          .
+          הבעלים נשמרים באופן אנונימי בלבד (חתימת hash, ללא שמות או מספרי זהות גלויים). ניתן לאמת את
+          נתוני המגרשים מול המקור:
+        </p>
+        <ul className="sources">
+          {VERSION_IDS.map((v) => (
+            <li key={v}>
+              {DATASETS[v].label}:{' '}
+              <a href={`${base}${DATASETS[v].sources.plotsPdf}`} target="_blank" rel="noreferrer">
+                PDF מגרשים
+              </a>{' '}
+              |{' '}
+              <a href={`${base}${DATASETS[v].sources.plotsCsv}`} target="_blank" rel="noreferrer">
+                CSV מגרשים
+              </a>
+            </li>
+          ))}
+          <li>
+            תשריט מצב מוצע (106(ב)):{' '}
+            <a href={`${base}maps/proposed-1.pdf`} target="_blank" rel="noreferrer">
+              גיליון 1
+            </a>{' '}
+            |{' '}
+            <a href={`${base}maps/proposed-2.pdf`} target="_blank" rel="noreferrer">
+              גיליון 2
+            </a>
+          </li>
+        </ul>
+        <p>
+          בגרסת 106(ב) נתוני המגרשים הוקלדו מתוך טבלת השמאי (שמופיעה כתמונה ב-PDF) ואומתו מול שורת
+          הסיכום ומול שווי הזכויות בטבלת ההקצאה. השווי היחסי (₪) הוא החלק במגרש כפול שווי המגרש
+          בטבלה — אינו שומה.
         </p>
         <p>
-          החישוב באפליקציה הוא חישוב אריתמטי יחסי בלבד לפי הנתונים שהוזנו. הוא אינו מהווה שומה, ייעוץ
-          משפטי, ייעוץ תכנוני או אישור תכנוני כלשהו.
+          החישוב באפליקציה הוא חישוב אריתמטי יחסי בלבד לפי הנתונים שהוזנו. הוא אינו מהווה שומה,
+          ייעוץ משפטי, ייעוץ תכנוני או אישור תכנוני כלשהו.
         </p>
       </footer>
     </div>

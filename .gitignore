@@ -3,4 +3,10 @@ dist
 *.local
 .DS_Store
 *.tsbuildinfo
-public/named_tables.pdf
+# קבצי מקור עם שמות ומספרי זהות (PII) — מחוץ ל-public/ כדי שלא ייכללו ב-build
+sources/
+# חומרי מקור שהתקבלו לבדיקה — כוללים טבלאות עם שמות ומספרי זהות (PII)
+to-review/
+__pycache__/
+# מקורות הגרסה המופקדת (כוללים שמות — PII)
+old-sources/
