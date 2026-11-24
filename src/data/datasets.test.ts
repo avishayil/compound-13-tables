@@ -2,9 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   DATASETS,
   identityKeysIn,
+  isAmbiguousIn,
+  isDuplicateOwner,
+  ownerRows,
   resolveHoldings,
   resolveManyIn,
-  resolveOwners,
   type OwnersByVersion,
 } from './datasets';
 import type { OwnerHolding } from './owners';
@@ -67,6 +69,40 @@ describe('resolveManyIn — אוסף ההחזקות של כמה בעלים', () 
   });
 });
 
+describe('שמות זהים לבעלים שונים (הומונימים)', () => {
+  // N הוא ID1 במופקדת; ב-106(ב) N הוא אדם אחר (ID2), ו-ID1 מופיע תחת כתיב אחר
+  const all: OwnersByVersion = {
+    v1: [h('N', 'ID1', '44', '1/250')],
+    v2: [h('N', 'ID2', '41', '1/10'), h('N-variant', 'ID1', '107', '1/10')],
+  };
+
+  it('שם שתואם לכמה ת.ז. מסומן כעמום', () => {
+    expect(isAmbiguousIn(all, 'N')).toBe(true);
+    expect(isAmbiguousIn(all, 'ID1')).toBe(false);
+    expect(isAmbiguousIn(all, 'N-variant')).toBe(false);
+  });
+
+  it('לשם עמום אין קישור דרך ת.ז. — רק התאמות ישירות', () => {
+    expect(resolveManyIn(all, 'v2', ['N']).map((x) => x.plotId)).toEqual(['41']);
+    expect(resolveManyIn(all, 'v1', ['N']).map((x) => x.plotId)).toEqual(['44']);
+  });
+
+  it('אפשר להוסיף לפי שם אדם בעל שם זהה למי שכבר נוסף לפי ת.ז.', () => {
+    const byId = identityKeysIn(all, 'ID1');
+    const byName = identityKeysIn(all, 'N');
+    expect(isDuplicateOwner([byId], byName)).toBe(false);
+  });
+});
+
+describe('isDuplicateOwner', () => {
+  it('כפול רק כשכל המזהים החדשים כבר קיימים', () => {
+    expect(isDuplicateOwner([['a'], ['b']], ['a'])).toBe(true);
+    expect(isDuplicateOwner([['a'], ['b']], ['a', 'b'])).toBe(true);
+    expect(isDuplicateOwner([['a']], ['a', 'c'])).toBe(false);
+    expect(isDuplicateOwner([], ['a'])).toBe(false);
+  });
+});
+
 describe('identityKeysIn — זהות הבעלים למניעת הוספה כפולה', () => {
   it('שני חוכרים של אותו בעלים ללא ת.ז. מקבלים זהויות שונות', () => {
     const all: OwnersByVersion = {
@@ -91,36 +127,56 @@ describe('identityKeysIn — זהות הבעלים למניעת הוספה כפ�
 });
 
 describe('נתונים אמיתיים — חוכרים ב-v2', () => {
-  // בעלים ללא ת.ז. שלקרקע שלו כמה חוכרים
+  // בעלים ללא ת.ז. שלקרקע שלו לפחות שני חוכרים שונים
   const lesseeRows = DATASETS.v2.owners.filter((o) => o.altNameHash && !o.idHash);
-  const owner = lesseeRows[0].nameHash;
-  const [rowA, rowB] = lesseeRows.filter(
-    (o, i, arr) =>
-      o.nameHash === owner && arr.findIndex((x) => x.altNameHash === o.altNameHash) === i,
-  );
+  const byOwner = new Map<string, OwnerHolding[]>();
+  for (const o of lesseeRows) byOwner.set(o.nameHash, [...(byOwner.get(o.nameHash) ?? []), o]);
+  const [owner, rows] =
+    [...byOwner].find(([, list]) => new Set(list.map((o) => o.altNameHash)).size >= 2) ?? [];
+  const rowA = rows?.[0];
+  const rowB = rows?.find((o) => o.altNameHash !== rowA?.altNameHash);
+  const all: OwnersByVersion = { v1: DATASETS.v1.owners, v2: DATASETS.v2.owners };
+
+  it('קיים בנתונים בעלים ללא ת.ז. עם שני חוכרים לפחות (fixture)', () => {
+    expect(owner).toBeDefined();
+    expect(rowB).toBeDefined();
+  });
 
   it('שני חוכרים שונים של אותו בעלים אינם נחשבים כפולים', () => {
-    const keysA = identityKeysIn(
-      { v1: DATASETS.v1.owners, v2: DATASETS.v2.owners },
-      rowA.altNameHash,
-    );
-    const keysB = identityKeysIn(
-      { v1: DATASETS.v1.owners, v2: DATASETS.v2.owners },
-      rowB.altNameHash,
-    );
-    expect(keysA.some((k) => keysB.includes(k))).toBe(false);
+    const keysA = identityKeysIn(all, rowA!.altNameHash);
+    const keysB = identityKeysIn(all, rowB!.altNameHash);
+    expect(isDuplicateOwner([keysA], keysB)).toBe(false);
   });
 
-  it('הוספת הבעלים והחוכר של אותה שורה לא מכפילה את הזכויות', () => {
-    const both = resolveOwners('v2', [owner, rowA.altNameHash]);
-    expect(both.filter((x) => x === rowA)).toHaveLength(1);
+  it('הוספת הבעלים והחוכר של אותה שורה לא מכפילה את הזכויות בחישוב', () => {
+    const lesseeOnly = ownerRows('v2', [rowA!.altNameHash]).computed;
+    const both = ownerRows('v2', [owner!, rowA!.altNameHash]).computed;
+    const rowOf = (list: typeof both) =>
+      list.find((r) => r.lot.id === rowA!.plotId && r.shareInput === rowA!.fraction);
+    expect(rowOf(lesseeOnly)?.quantity).toBe(
+      DATASETS.v2.owners.filter(
+        (o) =>
+          o.altNameHash === rowA!.altNameHash &&
+          o.plotId === rowA!.plotId &&
+          o.fraction === rowA!.fraction,
+      ).length,
+    );
+    // השורה של החוכר נספרת פעם אחת גם כשגם הבעלים נוסף
+    const ownerAndLesseeRows = DATASETS.v2.owners.filter(
+      (o) =>
+        (o.nameHash === owner || o.altNameHash === rowA!.altNameHash) &&
+        o.plotId === rowA!.plotId &&
+        o.fraction === rowA!.fraction,
+    ).length;
+    expect(rowOf(both)?.quantity).toBe(ownerAndLesseeRows);
   });
 
-  it('resolveHoldings לחוכר מחזיר רק את השורות שלו', () => {
-    const holdings = resolveHoldings('v2', rowA.altNameHash);
-    expect(holdings.length).toBeGreaterThan(0);
-    expect(
-      holdings.every((x) => x.altNameHash === rowA.altNameHash || x.altIdHash === rowA.altIdHash),
-    ).toBe(true);
+  it('resolveHoldings לחוכר מחזיר בדיוק את השורות שבהן הוא החוכר', () => {
+    const expected = DATASETS.v2.owners.filter(
+      (o) =>
+        o.altNameHash === rowA!.altNameHash ||
+        (rowA!.altIdHash !== '' && o.altIdHash === rowA!.altIdHash),
+    );
+    expect(resolveHoldings('v2', rowA!.altNameHash)).toEqual(expected);
   });
 });

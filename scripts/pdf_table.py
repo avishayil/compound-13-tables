@@ -92,6 +92,23 @@ def owner_bands(page, name_col, data_top, data_bottom):
     return bands
 
 
+def parse_number(text):
+    """מספר מתוך טקסט תא ("1,234,567 ₪", "12.5"): מסיר פסיקי אלפים וסימנים, מעגל לשלם.
+    מחזיר None אם אין מספר."""
+    m = re.search(r"\d[\d,]*(?:\.\d+)?", text)
+    if not m:
+        return None
+    return round(float(m.group(0).replace(",", "")))
+
+
+def find_header(page, x0, min_height, page_no):
+    """ה-rect של כותרת הטבלה (בעמודת מס"ד). נכשל עם הודעה ברורה אם המבנה השתנה."""
+    header = next((r for r in page.rects if round(r["x0"]) == x0 and r["height"] > min_height), None)
+    if header is None:
+        raise SystemExit(f"page {page_no}: table header not found (x0={x0}) — layout changed?")
+    return header
+
+
 def clean(s):
     s = s.strip()
     return "" if s in {"", "-"} else s

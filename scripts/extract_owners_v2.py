@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """חילוץ נתוני הבעלים של גרסה v2 (עדכון לפי סעיף 106(ב), נובמבר 2026) אל
-public/data/v2/owners.csv — בצורה אנונימית (hashes בלבד, כמו ב-extract_owners.py של v1).
+public/data/v2/owners.csv — בצורה אנונימית (hashes בלבד, כמו ב-extract_owners_v1.py).
 
 מקור: sources/v2/named_tables.pdf (טבלת ההקצאה והאיזון, 12 עמ׳ A3, מופק מאקסל).
 הקובץ מכיל שמות ומספרי זהות ולכן הוא ב-.gitignore ומחוץ ל-public/ (כדי שלא ייכלל ב-build).
@@ -33,7 +33,18 @@ import pdfplumber
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from owner_hash import normalize_id, normalize_name, sha  # noqa: E402
-from pdf_table import at, cell_text, clean, in_col, ltr_text, owner_bands, text_lines, verticals  # noqa: E402
+from pdf_table import (  # noqa: E402
+    at,
+    cell_text,
+    clean,
+    find_header,
+    in_col,
+    ltr_text,
+    owner_bands,
+    parse_number,
+    text_lines,
+    verticals,
+)
 
 PDF_PATH = "sources/v2/named_tables.pdf"
 PLOTS_CSV = "public/data/v2/plots.csv"
@@ -57,7 +68,7 @@ def parse_page(page, page_no):
     missing = EXPECTED_VERTICALS - verticals(page)
 
     # גבול עליון/תחתון של אזור הנתונים: תחתית כותרת הטבלה ותחתית הקווים האנכיים
-    header = next(r for r in page.rects if round(r["x0"]) == 1159 and r["height"] > 30)
+    header = find_header(page, 1159, 30, page_no)
     data_top = header["bottom"]
     data_bottom = max(r["bottom"] for r in page.rects if r["height"] > 50)
     if missing:
@@ -89,8 +100,8 @@ def parse_page(page, page_no):
             frac = at(frac_lines, top)
             if not re.fullmatch(r"\d+/\d+", frac):
                 raise SystemExit(f"page {page_no}: lot {lot} at y={top} has no fraction ({frac!r})")
-            value = int(re.sub(r"\D", "", at(value_lines, top)) or 0)
-            area = int(re.sub(r"\D", "", at(area_lines, top)) or 0)
+            value = parse_number(at(value_lines, top)) or 0
+            area = parse_number(at(area_lines, top)) or 0
             holdings.append({"lot": lot, "fraction": frac, "value": value, "area": area})
 
         bands.append(

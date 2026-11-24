@@ -1,7 +1,7 @@
-import { DATASETS, resolveOwners, type VersionId } from '../data/datasets';
+import { DATASETS, ownerRows, type VersionId } from '../data/datasets';
 import type { RightsResult } from '../lib/calc';
 import { roundArea, roundCurrency, roundUnits } from '../lib/calc';
-import { computeRows, holdingsToRows, sumResults } from '../lib/rows';
+import { sumResults } from '../lib/rows';
 import type { AddedOwner } from './OwnerPicker';
 
 interface Props {
@@ -41,12 +41,12 @@ const METRICS: Metric[] = [
 ];
 
 function totalsFor(version: VersionId, owners: AddedOwner[]): RightsResult | null {
-  const holdings = resolveOwners(
+  const { computed } = ownerRows(
     version,
     owners.map((o) => o.hash),
   );
-  if (holdings.length === 0) return null;
-  return sumResults(computeRows(DATASETS[version], holdingsToRows(holdings)).computed);
+  if (computed.length === 0) return null;
+  return sumResults(computed);
 }
 
 /** כרטיס השוואה: סיכום הזכויות של הבעלים שנבחרו בכל אחת מהגרסאות, והשינוי ביניהן. */

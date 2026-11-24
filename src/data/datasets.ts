@@ -5,6 +5,7 @@ import v2PlotsCsv from '../../public/data/v2/plots.csv?raw';
 import v2OwnersCsv from '../../public/data/v2/owners.csv?raw';
 import { parseLotsCsv, type Lot } from './lots';
 import { findHoldings, parseOwnersCsv, type OwnerHolding } from './owners';
+import { computeRows, holdingsToRows } from '../lib/rows';
 
 export type VersionId = 'v1' | 'v2';
 
@@ -84,24 +85,41 @@ function matchedSides(h: OwnerHolding, person: Set<string>): ('owner' | 'lessee'
   return sides;
 }
 
-/**
- * כל ה-hashes שמזהים את האדם: ה-hashes שחופשו, ובנוסף ה-hash של מס׳ הזהות של כל צד
- * שתאם להם — בכל הגרסאות. כך שורות שבהן השם נכתב אחרת (באותה גרסה או בגרסה אחרת)
- * מקושרות דרך ת.ז. רק ת.ז. של הצד שתאם נוספת — לא של הצד השני באותה שורה.
- */
-function personHashes(all: OwnersByVersion, hashes: string[]): Set<string> {
-  const person = new Set(hashes.filter(Boolean));
-  if (person.size === 0) return person;
-  const linked: string[] = [];
+/** מספרי הזהות (hash) של הצדדים שתואמים ישירות ל-hash, בכל הגרסאות. */
+function matchedIds(all: OwnersByVersion, hash: string): Set<string> {
+  const person = new Set([hash]);
+  const ids = new Set<string>();
   for (const owners of Object.values(all)) {
     for (const h of owners) {
       for (const side of matchedSides(h, person)) {
         const id = side === 'owner' ? h.idHash : h.altIdHash;
-        if (id) linked.push(id);
+        if (id) ids.add(id);
       }
     }
   }
-  for (const id of linked) person.add(id);
+  return ids;
+}
+
+/**
+ * האם ה-hash (בדרך כלל של שם) תואם לצדדים עם יותר ממספר זהות אחד — כלומר כמה בעלים
+ * שונים באותו שם (או אותו אדם שנרשם עם ת.ז. שונה בין הגרסאות).
+ */
+export function isAmbiguousIn(all: OwnersByVersion, hash: string): boolean {
+  return hash !== '' && matchedIds(all, hash).size > 1;
+}
+
+/**
+ * כל ה-hashes שמזהים את האדם: ה-hashes שחופשו, ובנוסף — כשה-hash חד-משמעי (תואם ת.ז. אחת
+ * לכל היותר) — ה-hash של מספר הזהות של הצד שתאם, בכל הגרסאות. כך שורות שבהן השם נכתב אחרת
+ * (באותה גרסה או בגרסה אחרת) מקושרות דרך ת.ז. רק ת.ז. של הצד שתאם נוספת — לא של הצד השני
+ * באותה שורה. שם עמום (כמה בעלים באותו שם) אינו מקושר, כדי לא למשוך זכויות של אדם אחר.
+ */
+function personHashes(all: OwnersByVersion, hashes: string[]): Set<string> {
+  const person = new Set(hashes.filter(Boolean));
+  for (const hash of [...person]) {
+    const ids = matchedIds(all, hash);
+    if (ids.size === 1) person.add([...ids][0]);
+  }
   return person;
 }
 
@@ -144,6 +162,25 @@ export function resolveHoldings(version: VersionId, hash: string): OwnerHolding[
 /** ההחזקות של כמה בעלים יחד בגרסה נתונה, ללא כפילות שורות. */
 export function resolveOwners(version: VersionId, hashes: string[]): OwnerHolding[] {
   return resolveManyIn(ALL_OWNERS, version, hashes);
+}
+
+/**
+ * האם בעלים חדש (לפי מזהיו) כבר נוסף: רק אם כל המזהים שלו כבר קיימים — כלומר ההוספה לא
+ * הייתה מוסיפה אף אדם חדש. כך שם עמום שכולל גם אדם שכבר נוסף עדיין ניתן להוספה.
+ */
+export function isDuplicateOwner(existing: string[][], keys: string[]): boolean {
+  const known = new Set(existing.flat());
+  return keys.length > 0 && keys.every((k) => known.has(k));
+}
+
+/** האם ה-hash תואם לכמה בעלים שונים (ראו isAmbiguousIn). */
+export function isAmbiguous(hash: string): boolean {
+  return isAmbiguousIn(ALL_OWNERS, hash);
+}
+
+/** שורות החישוב של כמה בעלים יחד בגרסה נתונה — משמש את טבלת התוצאות ואת כרטיס ההשוואה. */
+export function ownerRows(version: VersionId, hashes: string[]) {
+  return computeRows(DATASETS[version], holdingsToRows(resolveOwners(version, hashes)));
 }
 
 /** מזהי האדם בכל הגרסאות (ראו identityKeysIn). */

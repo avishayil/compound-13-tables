@@ -1,5 +1,11 @@
 import { useState } from 'react';
-import { identityKeys, resolveHoldings, type VersionId } from '../data/datasets';
+import {
+  identityKeys,
+  isAmbiguous,
+  isDuplicateOwner,
+  resolveHoldings,
+  type VersionId,
+} from '../data/datasets';
 import type { OwnerHolding } from '../data/owners';
 import { normalizeId, normalizeName, sha256Hex } from '../lib/hash';
 
@@ -9,6 +15,8 @@ export interface AddedOwner {
   keys: string[];
   label: string;
   hash: string;
+  /** השם תואם לכמה בעלים שונים (כמה מספרי זהות) — מוצגות הזכויות של כולם */
+  ambiguous: boolean;
 }
 
 interface Props {
@@ -42,13 +50,18 @@ export default function OwnerPicker({ version, owners, onChange }: Props) {
       return;
     }
     // מניעת הוספה כפולה של אותו בעלים — גם אם נוסף פעם לפי שם ופעם לפי ת.ז.
-    if (owners.some((o) => o.keys.some((k) => keys.includes(k)))) {
+    if (
+      isDuplicateOwner(
+        owners.map((o) => o.keys),
+        keys,
+      )
+    ) {
       setStatus('duplicate');
       setText('');
       return;
     }
 
-    onChange([...owners, { keys, label: raw, hash }]);
+    onChange([...owners, { keys, label: raw, hash, ambiguous: isAmbiguous(hash) }]);
     setText('');
     setStatus('idle');
   };
@@ -156,6 +169,17 @@ export default function OwnerPicker({ version, owners, onChange }: Props) {
         </p>
       )}
       {status === 'duplicate' && <p className="empty">הבעלים הזה כבר נוסף לרשימה.</p>}
+      {owners.some((o) => o.ambiguous) && (
+        <p className="empty">
+          השם{' '}
+          {owners
+            .filter((o) => o.ambiguous)
+            .map((o) => `״${o.label}״`)
+            .join(', ')}{' '}
+          מופיע בטבלאות אצל יותר מבעלים אחד (מספרי זהות שונים), והחישוב כולל את הזכויות של כולם.
+          לחישוב מדויק — הסירו אותו וחפשו לפי מספר ת.ז.
+        </p>
+      )}
       {owners.some((o) => holdingsOf(o).length === 0) && (
         <p className="empty">
           חלק מהבעלים שנוספו (מסומנים בקו) נמצאו רק בגרסה האחרת של הטבלאות. החליפו גרסה למעלה כדי

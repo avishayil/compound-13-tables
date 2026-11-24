@@ -3,14 +3,8 @@ import RightsForm from './components/RightsForm';
 import ResultsTable from './components/ResultsTable';
 import OwnerPicker, { type AddedOwner } from './components/OwnerPicker';
 import VersionCompare from './components/VersionCompare';
-import {
-  DATASETS,
-  DEFAULT_VERSION,
-  VERSION_IDS,
-  resolveOwners,
-  type VersionId,
-} from './data/datasets';
-import { computeRows, holdingsToRows, type RightRow } from './lib/rows';
+import { DATASETS, DEFAULT_VERSION, VERSION_IDS, ownerRows, type VersionId } from './data/datasets';
+import { computeRows, type RightRow } from './lib/rows';
 
 const MAVAT_URL = 'https://mavat.iplan.gov.il/SV4/1/3005361928/310';
 
@@ -66,16 +60,11 @@ export default function App() {
   const manual = useMemo(() => computeRows(dataset, rows), [dataset, rows]);
   const owner = useMemo(
     () =>
-      computeRows(
-        dataset,
-        holdingsToRows(
-          resolveOwners(
-            version,
-            owners.map((o) => o.hash),
-          ),
-        ),
+      ownerRows(
+        version,
+        owners.map((o) => o.hash),
       ),
-    [dataset, version, owners],
+    [version, owners],
   );
 
   const handleVersion = (next: VersionId) => {
