@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  hasInferredRows,
   isAmbiguous,
   isDuplicate,
   isFound,
@@ -15,6 +16,8 @@ export interface AddedOwner {
   hash: string;
   /** השם תואם ליותר ממספר זהות אחד — ייתכן שמדובר בכמה בעלים באותו שם */
   ambiguous: boolean;
+  /** נכללו שורות שקושרו לפי השם בלבד, בלי מספר זהות בטבלה */
+  inferred: boolean;
 }
 
 interface Props {
@@ -58,7 +61,10 @@ export default function OwnerPicker({ version, owners, onChange }: Props) {
       return;
     }
 
-    onChange([...owners, { label: raw, hash, ambiguous: isAmbiguous(hash) }]);
+    onChange([
+      ...owners,
+      { label: raw, hash, ambiguous: isAmbiguous(hash), inferred: hasInferredRows(hash) },
+    ]);
     setText('');
     setStatus('idle');
   };
@@ -175,6 +181,16 @@ export default function OwnerPicker({ version, owners, onChange }: Props) {
             .join(', ')}{' '}
           מופיע בטבלאות עם יותר ממספר זהות אחד — ייתכן שמדובר בכמה בעלים באותו שם, והחישוב כולל את
           כל השורות שבהן השם מופיע. לחישוב מדויק — הסירו אותו וחפשו לפי מספר ת.ז.
+        </p>
+      )}
+      {owners.some((o) => o.inferred) && (
+        <p className="empty">
+          עבור{' '}
+          {owners
+            .filter((o) => o.inferred)
+            .map((o) => `״${o.label}״`)
+            .join(', ')}{' '}
+          נכללו גם שורות שבהן השם מופיע בטבלאות בלי מספר זהות. בדקו מול הטבלאות שהן אכן שלכם.
         </p>
       )}
       {owners.some((o) => holdingsOf(o).length === 0) && (

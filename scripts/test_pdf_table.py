@@ -7,31 +7,31 @@ from pdf_table import parse_number  # noqa: E402
 
 CASES = {
     "1,234,567          ₪": 1234567,
-    "1,234,\n567": 1234567,  # מספר שנשבר אחרי פסיק
-    "12.5": 13,  # חצי כלפי מעלה
-    "13.5": 14,
-    "-1,234": -1234,
-    "(1,234)": -1234,
+    "3,789,413 ₪": 3789413,
+    "1,566": 1566,
+    "953": 953,
+    "1": 1,
     "-": None,
     "": None,
-    "₪ 3,789,413": 3789413,
-    "9,220מ''ר": 9220,
-    'סה"כ - 1,234': 1234,  # מקף מפריד, לא סימן שלילי
-    "- ₪ 5": 5,
 }
+
+# כל פורמט אחר אינו צפוי בטבלאות (נבדק מול כל התאים בפועל) ונכשל עם הקשר
+UNEXPECTED = ["1,234,\n567", "12.5", "-1,234", "(1,234)", "1,200,000 35,000", "12, 34", "1,23"]
 
 
 def main():
-    failures = {k: (parse_number(k), v) for k, v in CASES.items() if parse_number(k) != v}
-    try:
-        parse_number("1,200,000\n35,000")
-        failures["two numbers"] = "no ValueError"
-    except ValueError:
-        pass
+    failures = {k: (parse_number(k, "test"), v) for k, v in CASES.items() if parse_number(k, "test") != v}
+    for text in UNEXPECTED:
+        try:
+            parse_number(text, "test")
+            failures[text] = "accepted"
+        except SystemExit as e:
+            if "test" not in str(e):
+                failures[text] = f"no context: {e}"
     if failures:
         print("FAIL", failures)
         sys.exit(1)
-    print(f"OK — {len(CASES) + 1} parse_number cases")
+    print(f"OK — {len(CASES) + len(UNEXPECTED)} parse_number cases")
 
 
 if __name__ == "__main__":

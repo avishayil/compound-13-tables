@@ -100,8 +100,9 @@ def parse_page(page, page_no):
             frac = at(frac_lines, top)
             if not re.fullmatch(r"\d+/\d+", frac):
                 raise SystemExit(f"page {page_no}: lot {lot} at y={top} has no fraction ({frac!r})")
-            value = parse_number(at(value_lines, top)) or 0
-            area = parse_number(at(area_lines, top)) or 0
+            where = f"page {page_no} lot {lot} y={top}"
+            value = parse_number(at(value_lines, top), f"{where} value") or 0
+            area = parse_number(at(area_lines, top), f"{where} area") or 0
             holdings.append({"lot": lot, "fraction": frac, "value": value, "area": area})
 
         bands.append(

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   DATASETS,
   isAmbiguousIn,
+  hasInferredRowsIn,
   isDuplicateIn,
   ownerRows,
   resolveHoldings,
@@ -102,14 +103,23 @@ describe('isDuplicateIn — לפי הזכויות שהבעלים מוסיף בפ
     expect(isDuplicateIn(all, ['ID'], 'N')).toBe(true);
   });
 
-  it('ת.ז. אינה מושכת שורות של אותו שם בלי ת.ז. (ייתכן שהן של אדם אחר)', () => {
+  it('ת.ז. מקשרת לשורות של אותו שם בלי ת.ז. כשהשם חד-משמעי — ומסומנת כהשלמה', () => {
     const all: OwnersByVersion = {
       v1: [h('X', '', '44', '1/250')],
       v2: [h('X', 'IDX', '41', '1/10')],
     };
-    expect(resolveManyIn(all, 'v1', ['IDX'])).toEqual([]);
-    // השם מוסיף שורה שהת.ז. לא כללה — ולכן אינו כפול
-    expect(isDuplicateIn(all, ['IDX'], 'X')).toBe(false);
+    expect(resolveManyIn(all, 'v1', ['IDX']).map((x) => x.plotId)).toEqual(['44']);
+    expect(hasInferredRowsIn(all, 'IDX')).toBe(true);
+    expect(hasInferredRowsIn(all, 'X')).toBe(false);
+    // שם ות.ז. של אותו אדם מתייחסים לאותן שורות — כפולים זה לזה בשני הכיוונים
+    expect(isDuplicateIn(all, ['IDX'], 'X')).toBe(true);
+    expect(isDuplicateIn(all, ['X'], 'IDX')).toBe(true);
+  });
+
+  it('בעלים וחוכר באותה שורה יחידה הם שני אנשים — לא כפולים', () => {
+    const all: OwnersByVersion = { v1: [], v2: [h('N', 'ID1', '41', '1/1', 'L', 'ID2')] };
+    expect(isDuplicateIn(all, ['N'], 'L')).toBe(false);
+    expect(isDuplicateIn(all, ['L'], 'N')).toBe(false);
   });
 
   it('שני חוכרים של אותו בעלים ללא ת.ז. אינם כפולים זה לזה', () => {

@@ -103,10 +103,12 @@ def parse_page(page, page_no):
                 if not re.fullmatch(r"\d+/\d+", frac):
                     raise SystemExit(f"page {page_no}: lot {lot} at y={top} has no fraction ({frac!r})")
                 area_text = area_lines[i][1] if paired else at(area_lines, top)
-                area = parse_number(area_text) or 0
+                area = parse_number(area_text, f"page {page_no} lot {lot} area") or 0
                 holdings.append({"lot": lot, "fraction": frac, "area": area})
 
-        total = parse_number(" ".join(t for _, t in text_lines(col(TOTAL_VALUE))))
+        total = parse_number(
+            " ".join(t for _, t in text_lines(col(TOTAL_VALUE))), f"page {page_no} y={y0} total"
+        )
         out.append(
             {
                 "page": page_no,

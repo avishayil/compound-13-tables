@@ -9,7 +9,6 @@
 """
 import re
 from collections import defaultdict
-from decimal import ROUND_HALF_UP, Decimal
 
 LTR_RUN = re.compile(r"[0-9A-Za-z.,/\-]+")
 
@@ -93,27 +92,22 @@ def owner_bands(page, name_col, data_top, data_bottom):
     return bands
 
 
-NUMBER = re.compile(r"(\(|-)?(\d[\d,]*(?:\.\d+)?)(\))?")
+NUMBER = re.compile(r"^(\d{1,3}(?:,\d{3})*|\d+)(?:\s*₪)?$")
 
 
-def parse_number(text):
-    """מספר מתוך טקסט תא ("1,234,567 ₪", "-12.5", "(1,234)"). מעגל לשלם (חצי כלפי מעלה).
+def parse_number(text, where):
+    """מספר שלם מתוך טקסט תא: "1,234,567 ₪", "1,566", "953". תא ריק או "-" → None.
 
-    * מספר שנשבר לשתי שורות אחרי פסיק ("1,234,\n567") מחובר.
-    * סימן שלילי רק כשהוא צמוד לספרות ("-1,234" או "(1,234)") — מקף מפריד בין מילים לא נחשב.
-    * יותר ממספר אחד בתא → ValueError (כדי לא לחבר או לבחור מספר בטעות).
-    מחזיר None אם אין מספר.
+    הפורמטים האלה הם כל מה שמופיע בתאים שנקראים בטבלאות (נבדק מול כל התאים). כל פורמט אחר
+    (שלילי, עשרוני, מספר שבור או שני מספרים) נכשל עם הקשר (where) — עדיף לעצור מאשר לנחש.
     """
-    joined = re.sub(r",\s+(?=\d)", ",", text)
-    matches = list(NUMBER.finditer(joined))
-    if not matches:
+    t = text.strip()
+    if t in {"", "-"}:
         return None
-    if len(matches) > 1:
-        raise ValueError(f"more than one number in cell: {text!r}")
-    m = matches[0]
-    value = Decimal(m.group(2).replace(",", "")).quantize(Decimal(1), rounding=ROUND_HALF_UP)
-    negative = m.group(1) == "-" or (m.group(1) == "(" and m.group(3) == ")")
-    return -int(value) if negative else int(value)
+    m = NUMBER.match(t)
+    if not m:
+        raise SystemExit(f"{where}: unexpected number format {text!r}")
+    return int(m.group(1).replace(",", ""))
 
 
 def find_header(page, x0, min_height, page_no):
