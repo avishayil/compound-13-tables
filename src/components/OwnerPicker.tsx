@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  hasExcludedNameRows,
   isAmbiguous,
   isDuplicate,
   isFound,
@@ -15,6 +16,8 @@ export interface AddedOwner {
   hash: string;
   /** השם תואם ליותר ממספר זהות אחד — ייתכן שמדובר בכמה בעלים באותו שם */
   ambiguous: boolean;
+  /** יש בטבלאות שורות בשמו בלי מספר זהות, שלא נכללו (אפשר להוסיפן בחיפוש לפי השם) */
+  excludedNameRows: boolean;
 }
 
 interface Props {
@@ -58,7 +61,15 @@ export default function OwnerPicker({ version, owners, onChange }: Props) {
       return;
     }
 
-    onChange([...owners, { label: raw, hash, ambiguous: isAmbiguous(hash) }]);
+    onChange([
+      ...owners,
+      {
+        label: raw,
+        hash,
+        ambiguous: isAmbiguous(hash),
+        excludedNameRows: hasExcludedNameRows(hash),
+      },
+    ]);
     setText('');
     setStatus('idle');
   };
@@ -174,7 +185,19 @@ export default function OwnerPicker({ version, owners, onChange }: Props) {
             .map((o) => `״${o.label}״`)
             .join(', ')}{' '}
           מופיע בטבלאות עם יותר ממספר זהות אחד — ייתכן שמדובר בכמה בעלים באותו שם, והחישוב כולל את
-          כל השורות שבהן השם מופיע. לחישוב מדויק — הסירו אותו וחפשו לפי מספר ת.ז.
+          כל השורות שבהן השם מופיע. לחישוב מדויק — הסירו אותו וחפשו לפי מספר ת.ז. (ואם תופיע הודעה
+          על שורות בשמכם בלי ת.ז., בדקו אותן מול הטבלאות).
+        </p>
+      )}
+      {owners.some((o) => o.excludedNameRows) && (
+        <p className="empty">
+          עבור{' '}
+          {owners
+            .filter((o) => o.excludedNameRows)
+            .map((o) => `״${o.label}״`)
+            .join(', ')}{' '}
+          יש בטבלאות גם שורות באותו שם בלי מספר זהות, והן לא נכללו בחישוב (ייתכן שהן של אדם אחר
+          באותו שם). אם הן שלכם — הוסיפו גם חיפוש לפי השם המלא.
         </p>
       )}
       {owners.some((o) => holdingsOf(o).length === 0) && (

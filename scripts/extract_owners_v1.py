@@ -162,7 +162,8 @@ def main():
             frac = Fraction(h["fraction"])
             by_lot[lot] += frac
             value += frac * int(plots[lot][8])
-        if b["total"] is None or abs(value - b["total"]) > 10:
+        # סה"כ ריק/אפס בפורמט חשבונאי נחשב 0
+        if abs(value - (b["total"] or 0)) > 10:
             errors.append(
                 f"page {b['page']} y={b['y']}: Σ fraction × lot value = {float(value):,.0f} "
                 f"!= printed total {b['total']}"

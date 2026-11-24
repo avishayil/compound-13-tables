@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   DATASETS,
   isAmbiguousIn,
+  hasExcludedNameRowsIn,
   isDuplicateIn,
   ownerRows,
   resolveHoldings,
@@ -112,6 +113,16 @@ describe('isDuplicateIn — לפי הזכויות שהבעלים מוסיף בפ
     // השם מתייחס לשורות נוספות — ולכן אינו כפול לת.ז. (ולהפך); שורות משותפות נספרות פעם אחת
     expect(isDuplicateIn(all, ['IDX'], 'X')).toBe(false);
     expect(isDuplicateIn(all, ['X'], 'IDX')).toBe(false);
+  });
+
+  it('מדווח כשלאדם יש שורות בשמו בלי ת.ז. שלא נכללו בחיפוש', () => {
+    const all: OwnersByVersion = {
+      v1: [h('X', '', '44', '1/250')],
+      v2: [h('X', 'IDX', '41', '1/10'), h('Y', 'IDY', '42', '1/1')],
+    };
+    expect(hasExcludedNameRowsIn(all, 'IDX')).toBe(true);
+    expect(hasExcludedNameRowsIn(all, 'X')).toBe(false); // חיפוש לפי שם כבר כולל אותן
+    expect(hasExcludedNameRowsIn(all, 'IDY')).toBe(false);
   });
 
   it('שם ות.ז. של אותו אדם (כל השורות עם ת.ז.) — כפולים זה לזה', () => {

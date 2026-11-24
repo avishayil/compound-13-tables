@@ -173,6 +173,25 @@ function rowSet(all: OwnersByVersion, version: VersionId, hashes: string[]): Set
 }
 
 /**
+ * האם בטבלאות יש שורות בשם של האדם (של צד שתאם) בלי מספר זהות, שלא נכללו בחיפוש — למשל חיפוש
+ * לפי ת.ז. כשבגרסה אחרת השם רשום בלי ת.ז. השורות האלה אינן נכללות אוטומטית (ייתכן שהן של אדם
+ * אחר באותו שם), ולכן המשתמש מקבל הודעה שיוכל להוסיף אותן בחיפוש לפי השם.
+ */
+export function hasExcludedNameRowsIn(all: OwnersByVersion, hash: string): boolean {
+  const index = indexOf(all);
+  const included = allEntries(all, [hash]);
+  const names = new Set(
+    [...included.values()].map((e) => (e.side === 'owner' ? e.row.nameHash : e.row.altNameHash)),
+  );
+  for (const name of names) {
+    for (const e of index.get(name) ?? []) {
+      if (!sideId(e) && !included.has(e.key)) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * ההחזקות של כמה בעלים יחד בגרסה נתונה, בסדר הטבלה. כל שורה מופיעה לכל היותר פעם אחת — גם
  * אם גם הבעלים וגם החוכר שלה נוספו — ושורות כפולות לגיטימיות (רישומים נפרדים) נשמרות.
  */
@@ -218,6 +237,11 @@ export function isDuplicate(existing: string[], hash: string): boolean {
 /** האם ל-hash יש החזקות באחת הגרסאות לפחות. */
 export function isFound(hash: string): boolean {
   return VERSION_IDS.some((v) => resolveHoldings(v, hash).length > 0);
+}
+
+/** ראו hasExcludedNameRowsIn. */
+export function hasExcludedNameRows(hash: string): boolean {
+  return hasExcludedNameRowsIn(ALL_OWNERS, hash);
 }
 
 /** האם ה-hash תואם לכמה בעלים שונים (ראו isAmbiguousIn). */
