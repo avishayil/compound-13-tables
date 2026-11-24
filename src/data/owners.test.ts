@@ -68,6 +68,12 @@ describe.each(VERSION_IDS)('owners.csv (נתונים אמיתיים) — %s', (v
     }
   });
 
+  it('כל מגרש בגרסה מוקצה לבעלים כלשהם (גם החזקות בשלמות — שבר 1)', () => {
+    const allocated = new Set(ds.owners.map((o) => o.plotId));
+    const missing = ds.lots.map((l) => l.id).filter((id) => !allocated.has(id));
+    expect(missing).toEqual([]);
+  });
+
   it('סכום השברים של כל מגרש שווה ל-1 (שלמות נתונים)', () => {
     const byPlot = new Map<string, number>();
     for (const o of ds.owners) {
@@ -86,6 +92,17 @@ describe('נתונים אמיתיים — בעלים ספציפיים', () => {
     expect(holdings).toHaveLength(4);
     expect(holdings.filter((h) => h.plotId === '44' && h.fraction === '1/250')).toHaveLength(2);
     expect(holdings.filter((h) => h.plotId === '152' && h.fraction === '11/10000')).toHaveLength(2);
+  });
+
+  it('v1: החזקה בשלמות (שבר "1" בטבלה) נשמרת כ-1/1', async () => {
+    const daskal = DATASETS.v1.getHoldingsByHash(await nameHash('דסקל-חברה לחומרי בנין בע"מ'));
+    expect(daskal.map((h) => `${h.plotId} ${h.fraction}`).sort()).toEqual(['152 9/1250', '42 1/1']);
+  });
+
+  it('v1: שם ארוך לא נקטע (האות הראשונה נשמרת)', async () => {
+    // בחילוץ הקודם האות הראשונה של שמות ארוכים נחתכה — השם המלא לא נמצא
+    expect(DATASETS.v1.getHoldingsByHash(await nameHash('בלומרוזן אברהם יצחק'))).not.toEqual([]);
+    expect(DATASETS.v1.getHoldingsByHash(await nameHash('לומרוזן אברהם יצחק'))).toEqual([]);
   });
 
   it('v2: תתי-שורות משויכות לבעלים לפי גבולות התא (43B שייך לדסקל, לא לקק"ל)', async () => {

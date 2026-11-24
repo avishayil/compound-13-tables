@@ -1,6 +1,6 @@
 // hashing בצד-לקוח להתאמת קלט המשתמש מול ה-hashes ב-owners.csv (ללא חשיפת PII).
 
-/** נרמול שם זהה ללוגיקת ה-Python ב-scripts/extract_owners.py. */
+/** נרמול שם זהה ללוגיקת ה-Python ב-scripts/owner_hash.py. */
 export function normalizeName(name: string): string {
   return name
     .normalize('NFKC')

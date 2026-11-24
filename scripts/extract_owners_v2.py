@@ -33,6 +33,7 @@ import pdfplumber
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from owner_hash import normalize_id, normalize_name, sha  # noqa: E402
+from pdf_table import at, cell_text, clean, in_col, ltr_text, owner_bands, text_lines, verticals  # noqa: E402
 
 PDF_PATH = "sources/v2/named_tables.pdf"
 PLOTS_CSV = "public/data/v2/plots.csv"
@@ -51,42 +52,9 @@ COLS = {
 }
 EXPECTED_VERTICALS = {131, 185, 229, 325, 350, 375, 892, 929, 969, 1006, 1052}
 
-LTR_RUN = re.compile(r"[0-9A-Za-z.,/\-]+")
-
-
-def text_lines(chars):
-    """מקבץ תווים לשורות לפי top ומחזיר רשימת (top, text) בסדר לוגי (RTL)."""
-    lines = defaultdict(list)
-    for c in chars:
-        lines[round(c["top"])].append(c)
-    out = []
-    for top in sorted(lines):
-        cs = sorted(lines[top], key=lambda c: -c["x0"])
-        s = "".join(c["text"] for c in cs)
-        s = LTR_RUN.sub(lambda m: m.group(0)[::-1], s)
-        out.append((top, s.strip()))
-    return out
-
-
-def ltr_text(chars):
-    """טקסט LTR (מספר זהות): שורות מלמעלה למטה, תווים לפי x עולה."""
-    lines = defaultdict(list)
-    for c in chars:
-        lines[round(c["top"])].append(c)
-    return "".join(
-        "".join(c["text"] for c in sorted(lines[t], key=lambda c: c["x0"])) for t in sorted(lines)
-    )
-
-
-def in_col(c, col):
-    x0, x1 = COLS[col]
-    mid = (c["x0"] + c["x1"]) / 2
-    return x0 < mid < x1
-
 
 def parse_page(page, page_no):
-    verticals = {round(r["x0"]) for r in page.rects if r["height"] > 50}
-    missing = EXPECTED_VERTICALS - verticals
+    missing = EXPECTED_VERTICALS - verticals(page)
 
     # גבול עליון/תחתון של אזור הנתונים: תחתית כותרת הטבלה ותחתית הקווים האנכיים
     header = next(r for r in page.rects if round(r["x0"]) == 1159 and r["height"] > 30)
@@ -94,50 +62,27 @@ def parse_page(page, page_no):
     data_bottom = max(r["bottom"] for r in page.rects if r["height"] > 50)
     if missing:
         # עמוד הסיכום (12): אין עמודות שבר/שווי. מוודאים שאין בו שברים כדי לא לפספס החזקות.
-        left = "".join(c["text"] for c in sorted(page.chars, key=lambda c: (round(c["top"]), c["x0"])) if c["x0"] < 375 and c["top"] > data_top)
+        left = "".join(
+            c["text"]
+            for c in sorted(page.chars, key=lambda c: (round(c["top"]), c["x0"]))
+            if c["x0"] < 375 and c["top"] > data_top
+        )
         if re.search(r"\d+/\d+", left):
-            raise SystemExit(f"page {page_no}: column borders changed (missing {sorted(missing)}) but fractions found")
+            raise SystemExit(
+                f"page {page_no}: column borders changed (missing {sorted(missing)}) but fractions found"
+            )
         return []
 
-    # קווי הפרדה אופקיים שחוצים את עמודת שם הבעלים
-    seps = sorted(
-        {
-            round(r["top"], 1)
-            for r in page.rects
-            if r["height"] < 1
-            and r["x0"] <= COLS["owner_name"][0] + 1
-            and r["x1"] >= COLS["owner_name"][1] - 1
-            and data_top - 1 <= r["top"] <= data_bottom + 1
-        }
-        | {round(data_top, 1), round(data_bottom, 1)}
-    )
-
-    chars = [c for c in page.chars if data_top < c["top"] < data_bottom]
     bands = []
-    for y0, y1 in zip(seps, seps[1:]):
-        if y1 - y0 < 2:
-            continue
-        band = [c for c in chars if y0 <= c["top"] < y1]
-        if not band:
-            continue
+    for y0, band in owner_bands(page, COLS["owner_name"], data_top, data_bottom):
 
         def col_chars(col):
-            return [c for c in band if in_col(c, col)]
-
-        name = " ".join(t for _, t in text_lines(col_chars("owner_name")))
-        lessee = " ".join(t for _, t in text_lines(col_chars("lessee_name")))
-        owner_id = ltr_text(col_chars("owner_id"))
-        lessee_id = ltr_text(col_chars("lessee_id"))
+            return [c for c in band if in_col(c, COLS[col])]
 
         holdings = []
         frac_lines = text_lines(col_chars("fraction"))
         value_lines = text_lines(col_chars("value"))
         area_lines = text_lines(col_chars("lot_area"))
-
-        def at(lines, top):
-            hits = [t for y, t in lines if abs(y - top) <= 2]
-            return hits[0] if hits else ""
-
         for top, lot in text_lines(col_chars("lot")):
             if not re.fullmatch(r"\d+[AB]?", lot):
                 continue
@@ -152,19 +97,14 @@ def parse_page(page, page_no):
             {
                 "page": page_no,
                 "y": y0,
-                "name": name,
-                "owner_id": owner_id,
-                "lessee": lessee,
-                "lessee_id": lessee_id,
+                "name": cell_text(col_chars("owner_name")),
+                "owner_id": ltr_text(col_chars("owner_id")),
+                "lessee": cell_text(col_chars("lessee_name")),
+                "lessee_id": ltr_text(col_chars("lessee_id")),
                 "holdings": holdings,
             }
         )
     return bands
-
-
-def clean(s):
-    s = s.strip()
-    return "" if s in {"", "-"} else s
 
 
 def main():
