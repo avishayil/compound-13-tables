@@ -7,7 +7,7 @@ import {
   DATASETS,
   DEFAULT_VERSION,
   VERSION_IDS,
-  resolveHoldings,
+  resolveOwners,
   type VersionId,
 } from './data/datasets';
 import { computeRows, holdingsToRows, type RightRow } from './lib/rows';
@@ -66,7 +66,15 @@ export default function App() {
   const manual = useMemo(() => computeRows(dataset, rows), [dataset, rows]);
   const owner = useMemo(
     () =>
-      computeRows(dataset, holdingsToRows(owners.flatMap((o) => resolveHoldings(version, o.hash)))),
+      computeRows(
+        dataset,
+        holdingsToRows(
+          resolveOwners(
+            version,
+            owners.map((o) => o.hash),
+          ),
+        ),
+      ),
     [dataset, version, owners],
   );
 

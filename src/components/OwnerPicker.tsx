@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { resolveHoldings, VERSION_IDS, type VersionId } from '../data/datasets';
+import { identityKeys, resolveHoldings, type VersionId } from '../data/datasets';
 import type { OwnerHolding } from '../data/owners';
 import { normalizeId, normalizeName, sha256Hex } from '../lib/hash';
 
@@ -20,23 +20,10 @@ interface Props {
 
 type SearchMode = 'name' | 'id';
 
-/**
- * מזהי הבעלים בכל הגרסאות: hash של ת.ז. (או של שם, אם אין ת.ז.) של כל החזקה שנמצאה.
- * משמש למניעת הוספה כפולה של אותו בעלים (גם אם נוסף פעם לפי שם ופעם לפי ת.ז.).
- * הערה: החזקות כפולות *בתוך* אותו בעלים הן לגיטימיות (זכויות נפרדות) ונשמרות כפי שהן.
- */
-function ownerKeys(hash: string): string[] {
-  const keys = new Set<string>();
-  for (const v of VERSION_IDS) {
-    for (const h of resolveHoldings(v, hash)) keys.add(h.idHash || h.nameHash);
-  }
-  return [...keys];
-}
-
 export default function OwnerPicker({ version, owners, onChange }: Props) {
   const [mode, setMode] = useState<SearchMode>('name');
   const [text, setText] = useState('');
-  const [status, setStatus] = useState<'idle' | 'notfound' | 'duplicate' | 'otherversion'>('idle');
+  const [status, setStatus] = useState<'idle' | 'notfound' | 'duplicate'>('idle');
 
   const holdingsOf = (o: AddedOwner): OwnerHolding[] => resolveHoldings(version, o.hash);
 
@@ -48,7 +35,7 @@ export default function OwnerPicker({ version, owners, onChange }: Props) {
     }
     const normalized = mode === 'name' ? normalizeName(raw) : normalizeId(raw);
     const hash = await sha256Hex(normalized);
-    const keys = ownerKeys(hash);
+    const keys = identityKeys(hash);
 
     if (keys.length === 0) {
       setStatus('notfound');
@@ -63,7 +50,7 @@ export default function OwnerPicker({ version, owners, onChange }: Props) {
 
     onChange([...owners, { keys, label: raw, hash }]);
     setText('');
-    setStatus(resolveHoldings(version, hash).length === 0 ? 'otherversion' : 'idle');
+    setStatus('idle');
   };
 
   const handleRemoveOwner = (hash: string) => {
@@ -169,9 +156,10 @@ export default function OwnerPicker({ version, owners, onChange }: Props) {
         </p>
       )}
       {status === 'duplicate' && <p className="empty">הבעלים הזה כבר נוסף לרשימה.</p>}
-      {status === 'otherversion' && (
+      {owners.some((o) => holdingsOf(o).length === 0) && (
         <p className="empty">
-          הבעלים נמצא רק בגרסה האחרת של הטבלאות. החליפו גרסה למעלה כדי לראות את הזכויות.
+          חלק מהבעלים שנוספו (מסומנים בקו) נמצאו רק בגרסה האחרת של הטבלאות. החליפו גרסה למעלה כדי
+          לראות את הזכויות שלהם.
         </p>
       )}
     </div>

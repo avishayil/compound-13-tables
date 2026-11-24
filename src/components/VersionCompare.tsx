@@ -1,4 +1,4 @@
-import { DATASETS, resolveHoldings, type VersionId } from '../data/datasets';
+import { DATASETS, resolveOwners, type VersionId } from '../data/datasets';
 import type { RightsResult } from '../lib/calc';
 import { roundArea, roundCurrency, roundUnits } from '../lib/calc';
 import { computeRows, holdingsToRows, sumResults } from '../lib/rows';
@@ -29,7 +29,7 @@ const METRICS: Metric[] = [
     format: (v) => roundUnits(v).toLocaleString('he-IL', { maximumFractionDigits: 4 }),
   },
   {
-    label: 'סה״כ מסחר ותעסוקה (מ״ר)',
+    label: 'סה״כ מסחר ותעסוקה (מ״ר) *',
     value: (r) => r.relativeCommercialTotal,
     format: (v) => roundArea(v).toLocaleString('he-IL', { maximumFractionDigits: 2 }),
   },
@@ -41,7 +41,10 @@ const METRICS: Metric[] = [
 ];
 
 function totalsFor(version: VersionId, owners: AddedOwner[]): RightsResult | null {
-  const holdings = owners.flatMap((o) => resolveHoldings(version, o.hash));
+  const holdings = resolveOwners(
+    version,
+    owners.map((o) => o.hash),
+  );
   if (holdings.length === 0) return null;
   return sumResults(computeRows(DATASETS[version], holdingsToRows(holdings)).computed);
 }
@@ -91,6 +94,10 @@ export default function VersionCompare({ owners }: Props) {
       <p className="compare-note">
         המגרשים השתנו בין הגרסאות (למשל מגרש 40 פוצל ל-40A ול-40B), ולכן ההשוואה היא בסך הזכויות ולא
         מגרש מול מגרש. אם שם נכתב אחרת בין הגרסאות, הבעלים מקושר לפי מספר הזהות.
+      </p>
+      <p className="compare-note">
+        * הגדרת שטחי המסחר שונה בין הגרסאות: במופקדת — {DATASETS.v1.commercialNote} בעדכון 106(ב) —{' '}
+        {DATASETS.v2.commercialNote} לכן חלק מהשינוי בשורה זו נובע מההגדרה ולא משינוי בזכויות.
       </p>
     </div>
   );
